@@ -3,3 +3,10 @@ __pycache__/
 .venv/
 *.pyc
 .DS_Store
+
+# Local well-log / seismic dump (11 GB, mirrored from videpi.com). Never commit.
+data/
+.cursor/
+build/
+dist/
+*.egg-info/
