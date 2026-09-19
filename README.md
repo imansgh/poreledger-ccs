@@ -166,6 +166,22 @@ scenario. Nothing produced here is a site-specific estimate; the correct term is
 See [docs/ingestion.md](docs/ingestion.md) and
 [docs/scenario-literature-review.md](docs/scenario-literature-review.md).
 
+## HTTP API
+
+```bash
+pip install -e ".[ingest,web]"
+CCS_CORS_ORIGINS=http://localhost:3000 uvicorn ccs_screen.web.app:app --reload
+```
+
+```bash
+curl -s -X POST 'http://localhost:8000/wells/SALUZZO%7C1/screen'   -H 'Content-Type: application/json'   -d '{"user_inputs": {"area_m2": 8.0e7, "thickness_m": 35.0}, "samples": 2000}'
+```
+
+`area_m2` and `thickness_m` are required with **no defaults** - omit them and
+the request is rejected, never filled in. Every response carries an
+`interpretation` block marking the number as scenario-based, not site-specific,
+not certified. See [docs/http-api.md](docs/http-api.md).
+
 ## Next (on purpose left out)
 
 Two-phase plume, residual/solubility trapping, caprock geomechanics, well integrity. Those are the follow-on if this repo stays the CCS public project.
@@ -173,12 +189,14 @@ Two-phase plume, residual/solubility trapping, caprock geomechanics, well integr
 ## Repo layout
 
 ```
-src/ccs_screen/    properties, capacity, pressure, monte_carlo, surrogate, config, cli
+src/ccs_screen/    properties, capacity, pressure, monte_carlo, surrogate, config,
+                   api, cli
+src/ccs_screen/web/      FastAPI app, Pydantic schemas, settings
 src/ccs_screen/ingest/   provenance, identity, units, records, sources,
                          normalize, completeness, assumptions,
                          scenario, report, cli
 scripts/run_demo.py
-tests/             405 tests + JSON fixtures, no network, no dependency on data/
+tests/             538 tests + JSON fixtures, no network, no dependency on data/
 ```
 
 CI (`.github/workflows/ci.yml`) runs the suite on Python 3.10, 3.11 and 3.12 on

@@ -43,7 +43,8 @@ class EvidenceClass(str, Enum):
     SITE_SPECIFIC = "site_specific"   # measured in, or derived from, this well
     REGIONAL = "regional"             # same play/basin, different wells
     GENERIC = "generic"               # published methodology, not this region
-    UNSUPPORTED = "unsupported"       # no literature basis; user must supply
+    USER_INPUT = "user_input"         # supplied at run time by the person asking
+    UNSUPPORTED = "unsupported"       # no literature basis and nobody supplied one
     PLACEHOLDER = "placeholder"       # exists to exercise code, not to be used
 
 
@@ -184,7 +185,8 @@ class Assumption:
         return (
             isinstance(self.citation, Citation)
             and self.citation.evidence_class not in
-            (EvidenceClass.PLACEHOLDER, EvidenceClass.UNSUPPORTED)
+            (EvidenceClass.PLACEHOLDER, EvidenceClass.UNSUPPORTED,
+             EvidenceClass.USER_INPUT)
         )
 
     def config_value(self) -> float | list[float]:

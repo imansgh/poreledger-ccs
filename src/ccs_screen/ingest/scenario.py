@@ -253,6 +253,8 @@ class ResolvedInput:
         declared generic model* (hydrostatic pressure from depth) cannot be read
         as a plain measurement. It is neither purely source nor purely assumed.
         """
+        if self.evidence_class is EvidenceClass.USER_INPUT:
+            return "USER"
         if self.is_assumed:
             return "ASSUMED"
         if (self.provenance is Provenance.DERIVED
