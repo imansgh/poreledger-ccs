@@ -163,6 +163,15 @@ built-ins are labelled placeholders. `temperature_k` can never be supplied by a
 scenario. Nothing produced here is a site-specific estimate; the correct term is
 **scenario-based capacity**.
 
+A JSON-shaped Python API (`ccs_screen.api`) wraps this for a future web
+service. `area_m2` and `net thickness_m` are **required caller inputs with no
+defaults**; omit them and the result is a structured `blocked`, never a number.
+
+```python
+from ccs_screen import api
+api.screen_well("SALUZZO|1", {"area_m2": 8.0e7, "thickness_m": 35.0})
+```
+
 See [docs/ingestion.md](docs/ingestion.md) and
 [docs/scenario-literature-review.md](docs/scenario-literature-review.md).
 
@@ -173,12 +182,13 @@ Two-phase plume, residual/solubility trapping, caprock geomechanics, well integr
 ## Repo layout
 
 ```
-src/ccs_screen/    properties, capacity, pressure, monte_carlo, surrogate, config, cli
+src/ccs_screen/    properties, capacity, pressure, monte_carlo, surrogate, config,
+                   api, cli
 src/ccs_screen/ingest/   provenance, identity, units, records, sources,
                          normalize, completeness, assumptions,
                          scenario, report, cli
 scripts/run_demo.py
-tests/             405 tests + JSON fixtures, no network, no dependency on data/
+tests/             506 tests + JSON fixtures, no network, no dependency on data/
 ```
 
 CI (`.github/workflows/ci.yml`) runs the suite on Python 3.10, 3.11 and 3.12 on

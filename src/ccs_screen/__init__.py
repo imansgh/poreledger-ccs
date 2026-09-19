@@ -1,5 +1,13 @@
 """Screening-grade tools for geologic CO2 storage."""
 
+from ccs_screen.api import (
+    INTERPRETATION,
+    REQUIRED_USER_INPUTS,
+    USER_INPUT_SPEC,
+    ApiError,
+    UnknownWellError,
+    UserInputs,
+)
 from ccs_screen.capacity import volumetric_storage_mass_kg
 from ccs_screen.config import (
     BOUNDS,
@@ -42,17 +50,23 @@ from ccs_screen.surrogate import (
 __version__ = "0.2.0"
 
 __all__ = [
+    "ApiError",
     "BOUNDS",
-    "REQUIRED_FIELDS",
+    "CapacitySample",
     "ConfigError",
     "DEPLETED_GAS_ANALOG",
     "FEATURE_ORDER",
-    "CapacitySample",
+    "INTERPRETATION",
     "LinearSurrogate",
     "McResult",
+    "REQUIRED_FIELDS",
+    "REQUIRED_USER_INPUTS",
     "ScreeningConfig",
     "SurrogateMetrics",
+    "USER_INPUT_SPEC",
     "UniformPriors",
+    "UnknownWellError",
+    "UserInputs",
     "__version__",
     "allowable_delta_p_pa",
     "co2_compressibility",

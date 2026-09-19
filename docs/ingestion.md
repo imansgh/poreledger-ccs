@@ -401,3 +401,134 @@ payload = {
 
 `payload` is JSON-serialisable as-is, and every screening input in it carries an
 `"assumed": true|false` flag.
+
+---
+
+# Public screening API
+
+`ccs_screen.api` is the boundary a FastAPI wrapper would sit on. It imports no
+web framework and returns plain JSON-shaped dicts.
+
+| Function | Intended route |
+| --- | --- |
+| `list_wells()` | `GET /wells` |
+| `get_well(well_id)` | `GET /wells/{id}` |
+| `required_user_inputs(well_id)` | `GET /wells/{id}/inputs` |
+| `screen_well(well_id, user_inputs, scenario=...)` | `POST /wells/{id}/screen` |
+| `compare_temperature_methods(well_id, user_inputs, ...)` | `POST /wells/{id}/temperature` |
+| `screening_funnel(scenario, user_inputs)` | `GET /funnel` |
+| `list_scenarios()` | `GET /scenarios` |
+
+## Required user inputs
+
+`area_m2` and `thickness_m` must be supplied by the caller. `UserInputs` has no
+defaults, so there is no code path in which a screening runs on a filler value.
+Both are rejected when zero, negative, non-finite, non-numeric or absent, and
+neither is ever inferred from licence boundaries, concession polygons, well
+spacing, an arbitrary radius, or gross stratigraphic thickness.
+
+A request missing them returns a structured refusal, never a number:
+
+```json
+{
+  "status": "blocked",
+  "reason": "missing_or_invalid_user_inputs",
+  "scenario_based_capacity_mt": null,
+  "error": "missing required user input(s): area_m2, thickness_m. ...",
+  "required_user_inputs": [{"field": "area_m2", "unit": "m2", "...": "..."}]
+}
+```
+
+## Input partition
+
+Each required input lands in exactly one bucket, and the four together cover all
+six. A client never has to resolve an overlap:
+
+| Bucket | Label | Example |
+| --- | --- | --- |
+| `source_derived_inputs` | `source` | `temperature_k` |
+| `modelled_inputs` | `MODELLED` | `pressure_pa` (hydrostatic from source depth) |
+| `assumed_inputs` | `ASSUMED` | `porosity`, `storage_efficiency` (cited) |
+| `user_supplied_inputs` | `USER` | `area_m2`, `thickness_m` |
+
+Every entry in `screening_inputs` carries `value`, `unit`, `provenance`,
+`evidence_class`, `assumed`, `label`, and -- where they exist -- `rationale`,
+`author`, `derivation` and a structured `citation`.
+
+## Interpretation block
+
+Every response carries it, including blocked ones:
+
+```json
+{"interpretation": {"type": "scenario_based_capacity",
+                    "site_specific": false,
+                    "certified": false,
+                    "proven_resource": false}}
+```
+
+The capacity key is `scenario_based_capacity_mt`, so the caveat travels in the
+field name and not only in prose a client might not render.
+
+## Request limits
+
+| Parameter | Min | Max | Default | Behaviour |
+| --- | --- | --- | --- | --- |
+| `samples` | 1 | **50,000** | 2,000 | rejected when out of range, never clamped |
+
+The screening P50 converges by roughly 10,000 realisations (2,000 -> 10.64 Mt,
+10,000 -> 10.90 Mt, and 50,000 / 100,000 / 200,000 all within 0.03 Mt of that).
+Cost is linear at about 7 microseconds per realisation, so the cap costs ~0.33 s
+and 200,000 would cost ~1.4 s. The limit therefore sits five times past the
+point of diminishing scientific return while bounding CPU per request.
+
+Out-of-range, non-integer, boolean and string values raise `ApiError`. Nothing
+is clamped: a caller who asks for ten million and silently receives 50,000
+cannot reproduce the run they believe they made. `REQUEST_LIMITS` publishes the
+bounds so a client can validate before sending.
+
+## Scale-mismatch disclosure
+
+Results from `literature-screening-v1` carry an advisory warning in
+`interpretation.warnings`:
+
+```json
+{
+  "code": "scale_mismatch_basin_vs_closure",
+  "severity": "advisory",
+  "message": "Literature-constrained porosity and storage-efficiency ranges are not site-specific closure-scale calibrations.",
+  "affects": ["porosity", "storage_efficiency"],
+  "invalidates_result": false,
+  "correction_applied": false
+}
+```
+
+Storage efficiency (CSLF-T-2008-04) is calibrated at basin/aquifer scale and
+porosity (Donda et al. 2011) is a regional compilation, while area and net
+thickness arrive at closure scale. **No correction factor is applied** -- none
+is derivable from the cited sources -- and the warning does not claim the result
+is invalid. It exists so the caveat travels with the number instead of living
+only in a PDF. The warning attaches only to scenarios carrying literature-derived
+values; a placeholder scenario has no literature framing to mismatch.
+
+## Cache concurrency
+
+`load_records()` caches per data directory behind a double-checked lock. Reads
+and writes of the dict are individually atomic under the GIL, so the dict cannot
+be corrupted; the lock exists to stop a thundering herd, where N concurrent
+requests on a cold cache each run a full normalization. A regression test
+asserts that an 8-thread cold-cache burst normalizes exactly once (it observes 8
+without the lock).
+
+Cached records must be treated as **read-only**: they are shared across every
+request for that directory and `NormalizedWellRecord` is a mutable dataclass.
+Nothing in the API mutates them, and `refresh=True` rebuilds rather than
+mutating.
+
+## Unchanged rules
+
+- Temperature cannot be supplied as a user input or a scenario assumption; a
+  well without a usable reservoir temperature stays blocked.
+- Pressure stays `MODELLED`: derived from source depth under a declared
+  hydrostatic model.
+- Caller inputs take precedence over a scenario's own value for the same
+  parameter; source data takes precedence over both.
