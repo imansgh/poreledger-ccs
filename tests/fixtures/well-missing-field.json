@@ -1,0 +1,7 @@
+{
+  "well_id": "WELL-INCOMPLETE",
+  "area_m2": 1.0e8,
+  "thickness_m": 85,
+  "porosity": 0.18,
+  "temperature_k": 358.15
+}

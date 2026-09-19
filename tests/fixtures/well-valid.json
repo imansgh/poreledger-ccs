@@ -1,0 +1,11 @@
+{
+  "well_id": "WELL-001",
+  "area_m2": [6.0e7, 1.2e8],
+  "thickness_m": 85,
+  "porosity": 0.18,
+  "pressure_pa": 12500000,
+  "temperature_k": 358.15,
+  "storage_efficiency": [0.02, 0.05],
+  "depth_m": 2450,
+  "samples": 300
+}

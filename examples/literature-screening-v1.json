@@ -1,0 +1,81 @@
+{
+  "name": "literature-screening-v1",
+  "description": "Literature-constrained screening scenario. Storage efficiency and porosity are taken from published methodology and a regional Italian compilation; pressure is derived per well from source depth under a declared hydrostatic model. Area and net thickness have no literature basis and must be supplied by the user.",
+  "version": "1",
+  "date": "2026-09-19",
+  "rationale": "Replaces placeholder values with the only two parameters the literature supports for this play type, and makes the two it does not support (area_m2, thickness_m) explicit user inputs rather than silent defaults. Produces scenario-based capacity, not a site estimate. See docs/scenario-literature-review.md.",
+  "deterministic": false,
+  "area_policy": "Area is not inferred from administrative licence boundaries. area_m2 is explicit scenario or user input.",
+  "net_thickness_policy": "Net storage thickness is not derived from gross stratigraphic thickness. thickness_m is explicit scenario or user input.",
+  "brine_density_kg_m3": [
+    1020.0,
+    1100.0
+  ],
+  "pressure_derived_from_depth": true,
+  "citation": {
+    "source": "CSLF Task Force on CO2 Storage Capacity Estimation / USDOE Capacity and Fairways Subgroup",
+    "title": "Comparison between Methodologies Recommended for Estimation of CO2 Storage Capacity in Geological Media - Phase III Report",
+    "year": 2008,
+    "text": "Bachu, S. (2008). Comparison between Methodologies Recommended for Estimation of CO2 Storage Capacity in Geological Media, Phase III Report. CSLF-T-2008-04, 21 April 2008. Carbon Sequestration Leadership Forum, Technical Group.",
+    "evidence_class": "generic",
+    "locator": "Executive Summary / Section on USDOE methodology",
+    "quote": "through Monte Carlo simulations ... the USDOE Subgroup obtained a range of values for these storage efficiency coefficients for the 15% and 85% confidence intervals, which are ... between 1% and 4% for deep saline aquifers",
+    "url": "https://hgeo.energy.gov/archives/cslf/sites/default/files/documents/PhaseIIIReportStorageCapacityEstimationTaskForce0408.pdf"
+  },
+  "assumed_parameters": [
+    "storage_efficiency",
+    "porosity"
+  ],
+  "assumptions": [
+    {
+      "parameter": "storage_efficiency",
+      "value": [
+        0.01,
+        0.04
+      ],
+      "unit": "-",
+      "author": "Iman (geoenergy engineer)",
+      "date": "2026-09-19",
+      "rationale": "CSLF/USDOE P15-P85 storage efficiency for deep saline aquifers, from Monte Carlo simulation of North American formations. Applied to Italian aquifers by Donda et al. (2011). LITERATURE-DERIVED, NOT SITE-SPECIFIC: this value was not measured in, or derived from, this well. The range is calibrated against basin-scale area, which is why area_m2 must be supplied consistently (see the area policy).",
+      "citation": {
+        "source": "CSLF Task Force on CO2 Storage Capacity Estimation / USDOE Capacity and Fairways Subgroup",
+        "title": "Comparison between Methodologies Recommended for Estimation of CO2 Storage Capacity in Geological Media - Phase III Report",
+        "year": 2008,
+        "text": "Bachu, S. (2008). Comparison between Methodologies Recommended for Estimation of CO2 Storage Capacity in Geological Media, Phase III Report. CSLF-T-2008-04, 21 April 2008. Carbon Sequestration Leadership Forum, Technical Group.",
+        "evidence_class": "generic",
+        "locator": "Executive Summary / Section on USDOE methodology",
+        "quote": "through Monte Carlo simulations ... the USDOE Subgroup obtained a range of values for these storage efficiency coefficients for the 15% and 85% confidence intervals, which are ... between 1% and 4% for deep saline aquifers",
+        "url": "https://hgeo.energy.gov/archives/cslf/sites/default/files/documents/PhaseIIIReportStorageCapacityEstimationTaskForce0408.pdf"
+      },
+      "citation_text": "Bachu, S. (2008). Comparison between Methodologies Recommended for Estimation of CO2 Storage Capacity in Geological Media, Phase III Report. CSLF-T-2008-04, 21 April 2008. Carbon Sequestration Leadership Forum, Technical Group.",
+      "evidence_class": "generic",
+      "literature_derived": true,
+      "confidence": "medium"
+    },
+    {
+      "parameter": "porosity",
+      "value": [
+        0.1,
+        0.35
+      ],
+      "unit": "-",
+      "author": "Iman (geoenergy engineer)",
+      "date": "2026-09-19",
+      "rationale": "Full porosity range across the 13 Italian potential reservoirs tabulated by Donda et al. (2011), Table 2, derived by those authors from sonic-log P-wave velocities. Same play type (Plio-Pleistocene clastics) as the pilot wells. LITERATURE-DERIVED, NOT SITE-SPECIFIC: this value was not measured in, or derived from, this well. The range is wide: its ends differ by 3.5x in capacity.",
+      "citation": {
+        "source": "Donda, Volpi, Persoglia & Parushev (OGS, Trieste)",
+        "title": "CO2 storage potential of deep saline aquifers: The case of Italy",
+        "year": 2011,
+        "text": "Donda, F., Volpi, V., Persoglia, S., Parushev, D. (2011). CO2 storage potential of deep saline aquifers: The case of Italy. International Journal of Greenhouse Gas Control, 5(2), 327-335. DOI: 10.1016/j.ijggc.2010.08.009",
+        "evidence_class": "regional",
+        "locator": "Table 2, porosity column (13 Italian potential reservoirs)",
+        "quote": "Key parameters of the Italian potential reservoirs for the evaluation of the CO2 geological storage: porosity 10-35%, derived from sonic-log P-wave velocities",
+        "url": "https://doi.org/10.1016/j.ijggc.2010.08.009"
+      },
+      "citation_text": "Donda, F., Volpi, V., Persoglia, S., Parushev, D. (2011). CO2 storage potential of deep saline aquifers: The case of Italy. International Journal of Greenhouse Gas Control, 5(2), 327-335. DOI: 10.1016/j.ijggc.2010.08.009",
+      "evidence_class": "regional",
+      "literature_derived": true,
+      "confidence": "medium"
+    }
+  ]
+}

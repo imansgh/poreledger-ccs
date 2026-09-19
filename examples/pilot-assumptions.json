@@ -1,0 +1,50 @@
+{
+  "name": "piemonte-pilot-2026-placeholder",
+  "assumptions": [
+    {
+      "parameter": "area_m2",
+      "value": [5.0e7, 1.5e8],
+      "author": "Iman",
+      "date": "2026-09-19",
+      "rationale": "PLACEHOLDER. No structural closure data exists in the dataset; the only polygons are administrative licence boundaries (median 268 km2). This range is a generic Po-valley closure scale for pipeline testing and is NOT a site estimate.",
+      "citation": "reconnaissance: docs/ingestion.md, area_m2 section",
+      "confidence": "low"
+    },
+    {
+      "parameter": "thickness_m",
+      "value": [25.0, 55.0],
+      "author": "Iman",
+      "date": "2026-09-19",
+      "rationale": "PLACEHOLDER net storage thickness. Sources give only gross chronostratigraphic intervals (91-2557 m), which are 20-50x too large to use directly. Net-to-gross is unavailable.",
+      "citation": "reconnaissance: thickness section",
+      "confidence": "low"
+    },
+    {
+      "parameter": "porosity",
+      "value": [0.12, 0.24],
+      "author": "Iman",
+      "date": "2026-09-19",
+      "rationale": "PLACEHOLDER. Logs record porosity only as qualitative type codes (PK/PI/PV/PC/PF); no numeric porosity exists in any source.",
+      "citation": "CSLF clastic screening ranges",
+      "confidence": "low"
+    },
+    {
+      "parameter": "pressure_pa",
+      "value": [1.2e7, 2.0e7],
+      "author": "Iman",
+      "date": "2026-09-19",
+      "rationale": "PLACEHOLDER. No measured pressure in any source. Range corresponds to hydrostatic at pilot depths; a real run needs RFT/DST data.",
+      "citation": "hydrostatic ~10.5 MPa/km",
+      "confidence": "low"
+    },
+    {
+      "parameter": "storage_efficiency",
+      "value": [0.02, 0.07],
+      "author": "Iman",
+      "date": "2026-09-19",
+      "rationale": "Engineering assumption by definition; nothing in the source data constrains E.",
+      "citation": "CSLF/DOE saline-formation efficiency range",
+      "confidence": "low"
+    }
+  ]
+}

@@ -1,4 +1,17 @@
-"""Peng-Robinson density for pure CO2. Screening-grade, not a custody-transfer EOS."""
+"""Peng-Robinson density for pure CO2. Screening-grade, not a custody-transfer EOS.
+
+Two details matter for CCS screening and are handled explicitly here:
+
+1. **Root selection.** Below the saturation pressure the cubic has three real
+   roots. Picking the densest one unconditionally returns a liquid density in
+   the vapour region (an order-of-magnitude error). The physical root is the
+   one with the lower fugacity, i.e. the lower molar Gibbs energy.
+2. **Volume translation.** Untranslated Peng-Robinson under-predicts dense-phase
+   CO2 density by 7-10%, and storage mass is linear in density. A constant
+   Peneloux shift brings the 12-30 MPa / 320-355 K window to within a few
+   percent. It slightly over-corrects near the critical point; see
+   ``tests/test_properties.py`` for the validated envelope.
+"""
 
 from __future__ import annotations
 
@@ -10,16 +23,46 @@ CO2_OMEGA = 0.225
 CO2_R_J_MOL_K = 8.314462618
 CO2_MW_KG_MOL = 0.0440095
 
+# Rackett compressibility for CO2, used by the Peneloux volume shift.
+CO2_Z_RA = 0.2722
+
+SQRT2 = math.sqrt(2.0)
+
 
 def co2_density_kg_m3(pressure_pa: float, temperature_k: float) -> float:
+    """Dense-phase CO2 density rho(P, T) in kg/m3."""
     if pressure_pa <= 0 or temperature_k <= 0:
         raise ValueError("pressure and temperature must be positive")
-    z = _peng_robinson_z(pressure_pa, temperature_k)
-    molar_volume = z * CO2_R_J_MOL_K * temperature_k / pressure_pa
+    molar_volume = co2_molar_volume_m3_mol(pressure_pa, temperature_k)
     return CO2_MW_KG_MOL / molar_volume
 
 
-def _peng_robinson_z(pressure_pa: float, temperature_k: float) -> float:
+def co2_molar_volume_m3_mol(pressure_pa: float, temperature_k: float) -> float:
+    """Volume-translated molar volume in m3/mol."""
+    if pressure_pa <= 0 or temperature_k <= 0:
+        raise ValueError("pressure and temperature must be positive")
+    z = co2_compressibility(pressure_pa, temperature_k)
+    v_eos = z * CO2_R_J_MOL_K * temperature_k / pressure_pa
+    v = v_eos - peneloux_shift_m3_mol()
+    if v <= 0:
+        raise ValueError("volume translation produced a non-physical molar volume")
+    return v
+
+
+def co2_compressibility(pressure_pa: float, temperature_k: float) -> float:
+    """Untranslated Peng-Robinson Z-factor of the thermodynamically stable phase."""
+    if pressure_pa <= 0 or temperature_k <= 0:
+        raise ValueError("pressure and temperature must be positive")
+    return _peng_robinson_z(pressure_pa, temperature_k)
+
+
+def peneloux_shift_m3_mol() -> float:
+    """Peneloux (1982) constant volume shift c for CO2."""
+    return 0.40768 * (CO2_R_J_MOL_K * CO2_TC_K / CO2_PC_PA) * (0.29441 - CO2_Z_RA)
+
+
+def _peng_robinson_ab(pressure_pa: float, temperature_k: float) -> tuple[float, float]:
+    """Dimensionless attraction (A) and covolume (B) parameters."""
     tr = temperature_k / CO2_TC_K
     kappa = 0.37464 + 1.54226 * CO2_OMEGA - 0.26992 * CO2_OMEGA**2
     alpha = (1 + kappa * (1 - math.sqrt(tr))) ** 2
@@ -27,16 +70,38 @@ def _peng_robinson_z(pressure_pa: float, temperature_k: float) -> float:
     b = 0.07780 * CO2_R_J_MOL_K * CO2_TC_K / CO2_PC_PA
     a_dim = a * pressure_pa / (CO2_R_J_MOL_K * temperature_k) ** 2
     b_dim = b * pressure_pa / (CO2_R_J_MOL_K * temperature_k)
+    return a_dim, b_dim
+
+
+def _ln_fugacity_coefficient(z: float, a_dim: float, b_dim: float) -> float:
+    """ln(phi) for a Peng-Robinson root; the stable phase minimises it."""
+    inner = (z + (1 + SQRT2) * b_dim) / (z + (1 - SQRT2) * b_dim)
+    if z <= b_dim or inner <= 0:
+        return math.inf
+    return (
+        z
+        - 1.0
+        - math.log(z - b_dim)
+        - a_dim / (2 * SQRT2 * b_dim) * math.log(inner)
+    )
+
+
+def _peng_robinson_z(pressure_pa: float, temperature_k: float) -> float:
+    a_dim, b_dim = _peng_robinson_ab(pressure_pa, temperature_k)
     # Z^3 - (1-B)Z^2 + (A-2B-3B^2)Z - (AB - B^2 - B^3) = 0
     c2 = -(1 - b_dim)
     c1 = a_dim - 2 * b_dim - 3 * b_dim**2
     c0 = -(a_dim * b_dim - b_dim**2 - b_dim**3)
     roots = _real_cubic_roots(1.0, c2, c1, c0)
-    liquid_like = [z for z in roots if z > b_dim]
-    if not liquid_like:
+    candidates = [z for z in roots if z > b_dim]
+    if not candidates:
         raise ValueError("Peng-Robinson failed to find a physical Z-factor")
-    # Prefer the densest (smallest Z) root in the compressed-liquid / dense-phase region.
-    return min(liquid_like)
+    if len(candidates) == 1:
+        return candidates[0]
+    # Three roots: the middle one is mechanically unstable, and the stable phase
+    # is whichever of the outer two has the lower fugacity.
+    liquid, vapour = min(candidates), max(candidates)
+    return liquid if _ln_fugacity_coefficient(liquid, a_dim, b_dim) <= _ln_fugacity_coefficient(vapour, a_dim, b_dim) else vapour
 
 
 def _real_cubic_roots(a: float, b: float, c: float, d: float) -> list[float]:

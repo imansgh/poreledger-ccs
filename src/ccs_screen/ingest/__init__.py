@@ -1,0 +1,165 @@
+"""Structured-source ingestion for the Piemonte pilot.
+
+    structured sources -> RawWellRecord -> NormalizedWellRecord
+    -> provenance + confidence -> completeness report
+    -> engineering assumptions -> ScreeningConfig
+
+The governing rule: incomplete but honest beats complete-looking. A field with
+no source is reported as missing and blocks ScreeningConfig construction until
+someone supplies a declared assumption for it.
+
+No OCR, no log digitisation, no seismic interpretation, no automated area,
+porosity or pressure estimation -- see docs/ingestion.md.
+"""
+
+from ccs_screen.ingest.assumptions import (
+    ASSUMABLE,
+    NO_ASSUMPTIONS,
+    Assumption,
+    AssumptionError,
+    AssumptionSet,
+    Citation,
+    EvidenceClass,
+)
+from ccs_screen.ingest.completeness import (
+    CompletenessReport,
+    IncompleteWellError,
+    WellCompleteness,
+    assess,
+    build_report,
+    build_screening_config,
+)
+from ccs_screen.ingest.report import (
+    CapacityResult,
+    ScreeningFunnel,
+    TemperatureComparison,
+    TemperatureDetail,
+    TemperatureVariant,
+    WellScreeningReport,
+    build_funnel,
+    compare_temperature_methods,
+    run_capacity,
+    screen_well,
+)
+from ccs_screen.ingest.scenario import (
+    AREA_POLICY_STATEMENT,
+    BUILTIN_SCENARIOS,
+    CENTRAL,
+    CSLF_2008,
+    DONDA_2011,
+    LITERATURE_SCREENING_V1,
+    LITERATURE_UNSUPPORTED,
+    NET_THICKNESS_POLICY_STATEMENT,
+    STANDARD_GRAVITY_M_S2,
+    CONSERVATIVE,
+    NO_SCENARIO,
+    SCENARIO_PARAMETERS,
+    SENSITIVITY,
+    SOURCE_ONLY_PARAMETERS,
+    IncompleteScreening,
+    ResolvedInput,
+    ScreeningScenario,
+    apply_scenario,
+    load_scenario,
+    resolve_inputs,
+)
+from ccs_screen.ingest.identity import WellIdentity, canonical_well_id, normalize_name, same_well
+from ccs_screen.ingest.normalize import WellNormalizer
+from ccs_screen.ingest.provenance import (
+    Confidence,
+    Conflict,
+    FieldValue,
+    Provenance,
+    SourceRef,
+    TemperatureMethod,
+    Unit,
+)
+from ccs_screen.ingest.records import (
+    NormalizedWellRecord,
+    RawWellRecord,
+    StratigraphicInterval,
+    TemperatureObservation,
+    ThicknessKind,
+)
+from ccs_screen.ingest.sources import StructuredSources, classify_temperature_method
+from ccs_screen.ingest.units import (
+    AmbiguousValueError,
+    DepthDatum,
+    DepthMeasurement,
+    UnitError,
+    parse_number,
+    to_kelvin,
+    to_metres,
+)
+
+__all__ = [
+    "AREA_POLICY_STATEMENT",
+    "ASSUMABLE",
+    "AmbiguousValueError",
+    "Assumption",
+    "AssumptionError",
+    "AssumptionSet",
+    "BUILTIN_SCENARIOS",
+    "CENTRAL",
+    "CONSERVATIVE",
+    "CSLF_2008",
+    "CapacityResult",
+    "Citation",
+    "CompletenessReport",
+    "Confidence",
+    "Conflict",
+    "DONDA_2011",
+    "DepthDatum",
+    "DepthMeasurement",
+    "EvidenceClass",
+    "FieldValue",
+    "IncompleteScreening",
+    "IncompleteWellError",
+    "LITERATURE_SCREENING_V1",
+    "LITERATURE_UNSUPPORTED",
+    "NET_THICKNESS_POLICY_STATEMENT",
+    "NO_ASSUMPTIONS",
+    "NO_SCENARIO",
+    "NormalizedWellRecord",
+    "Provenance",
+    "RawWellRecord",
+    "ResolvedInput",
+    "SCENARIO_PARAMETERS",
+    "SENSITIVITY",
+    "SOURCE_ONLY_PARAMETERS",
+    "STANDARD_GRAVITY_M_S2",
+    "ScreeningFunnel",
+    "ScreeningScenario",
+    "SourceRef",
+    "StratigraphicInterval",
+    "StructuredSources",
+    "TemperatureComparison",
+    "TemperatureDetail",
+    "TemperatureMethod",
+    "TemperatureObservation",
+    "TemperatureVariant",
+    "ThicknessKind",
+    "Unit",
+    "UnitError",
+    "WellCompleteness",
+    "WellIdentity",
+    "WellNormalizer",
+    "WellScreeningReport",
+    "apply_scenario",
+    "assess",
+    "build_funnel",
+    "build_report",
+    "build_screening_config",
+    "canonical_well_id",
+    "classify_temperature_method",
+    "compare_temperature_methods",
+    "load_scenario",
+    "normalize_name",
+    "parse_number",
+    "resolve_inputs",
+    "run_capacity",
+    "same_well",
+    "screen_well",
+    "to_kelvin",
+    "to_metres",
+]

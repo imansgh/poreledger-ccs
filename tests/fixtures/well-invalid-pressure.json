@@ -1,0 +1,9 @@
+{
+  "well_id": "WELL-BAD-P",
+  "area_m2": 1.0e8,
+  "thickness_m": 85,
+  "porosity": 0.18,
+  "pressure_pa": -12500000,
+  "temperature_k": 358.15,
+  "storage_efficiency": 0.04
+}
