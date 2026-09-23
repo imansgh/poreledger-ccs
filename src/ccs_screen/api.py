@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import threading
 from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -36,7 +37,8 @@ from ccs_screen.ingest.assumptions import (
     EvidenceClass,
 )
 from ccs_screen.ingest.normalize import WellNormalizer
-from ccs_screen.ingest.records import NormalizedWellRecord
+from ccs_screen.ingest.provenance import Confidence
+from ccs_screen.ingest.records import NormalizedWellRecord, ThicknessKind
 from ccs_screen.ingest.report import (
     compare_temperature_methods as _compare_methods,
 )
@@ -135,6 +137,72 @@ SCALE_MISMATCH_WARNING = {
     "reference": "docs/scenario-literature-review.md sections 8 and 10",
 }
 
+#: Percentile semantics, attached wherever P10/P50/P90 are returned (Finding 7.5).
+#:
+#: The engine uses the statistical convention (see ``monte_carlo``): p10 is the
+#: LOW case. Petroleum reserves reporting uses the opposite convention, so a
+#: consumer from that domain would invert the risk reading unless the payload
+#: says which one it is. Disclosure only -- no percentile is recomputed.
+PERCENTILE_CONVENTION = {
+    "convention": "statistical",
+    "p10": "low case -- 10th percentile of the sampled capacity distribution",
+    "p50": "median case -- 50th percentile of the sampled capacity distribution",
+    "p90": "high case -- 90th percentile of the sampled capacity distribution",
+    "ordering": "p10 <= p50 <= p90",
+    "note": (
+        "Statistical convention: P10 = low case, P50 = median case, P90 = high "
+        "case. This is NOT the petroleum reserves convention, in which P10 "
+        "denotes the high case."
+    ),
+}
+
+#: What the P10-P90 interval does and does not contain (Finding 12.5).
+#:
+#: The band is the spread of the Monte Carlo sample over the declared input
+#: ranges. The percentiles are computed correctly for that sample; what the band
+#: cannot contain is bias in the model or its inputs, which is not sampled. The
+#: audit found such biases and they are not all small, so the band must not be
+#: read as bracketing the true value. Disclosure only -- no value is adjusted.
+UNCERTAINTY_BAND_DISCLOSURE = {
+    "code": "sampled_uncertainty_band_excludes_systematic_bias",
+    "interval": "p10-p90",
+    "lower_bound": "p10 -- the lower sampled case",
+    "upper_bound": "p90 -- the upper sampled case",
+    "represents": (
+        "The model's sampled uncertainty band: the spread of the Monte Carlo "
+        "realisations over the declared input ranges."
+    ),
+    "statement": (
+        "The reported P10-P90 interval is the model's sampled uncertainty band. "
+        "P10 is the lower sampled case and P90 is the upper sampled case of the "
+        "Monte Carlo distribution, and both are correctly computed for that "
+        "distribution. The band does not necessarily contain systematic or model "
+        "bias: systematic biases identified by the scientific validation audit "
+        "lie outside the Monte Carlo sampling uncertainty and may place the true "
+        "value outside the reported P10-P90 interval. It is not a confidence "
+        "interval for the true storage capacity."
+    ),
+    "includes_systematic_bias": False,
+    "values_adjusted": False,
+    "reference": "docs/scientific-validation-audit.md, Finding 12.5",
+}
+
+#: The Finding 12.5 disclosure as an interpretation warning, so a client that
+#: renders warnings shows it next to the number without extra code.
+UNCERTAINTY_BAND_WARNING = {
+    "code": UNCERTAINTY_BAND_DISCLOSURE["code"],
+    "severity": "advisory",
+    "message": (
+        "The P10-P90 interval is the model's sampled uncertainty band and does "
+        "not necessarily contain systematic or model bias."
+    ),
+    "detail": UNCERTAINTY_BAND_DISCLOSURE["statement"],
+    "affects": ["scenario_based_capacity_mt"],
+    "invalidates_result": False,
+    "correction_applied": False,
+    "reference": UNCERTAINTY_BAND_DISCLOSURE["reference"],
+}
+
 #: Attached to every screening result. The wording is deliberate: this pipeline
 #: cannot produce a certified, proven or site-specific figure, and says so in a
 #: field a client can assert on rather than in prose it may not render.
@@ -192,18 +260,33 @@ _USER_CITATION = Citation(
 )
 
 
-def _interpretation(scenario: ScreeningScenario | None = None) -> dict[str, Any]:
+def _interpretation(scenario: ScreeningScenario | None = None,
+                    user_inputs: "UserInputs | None" = None,
+                    band_reported: bool = False) -> dict[str, Any]:
     """Interpretation block, with any warnings the scenario earns.
 
     The scale-mismatch warning attaches when the scenario actually carries
     literature-derived values; a placeholder or empty scenario has no literature
     framing to mismatch. The block is rebuilt per call so the module constant
     never accumulates warnings across requests.
+
+    Net-to-gross disclosure applies only when ``user_inputs`` is given, i.e. to a
+    per-well result whose thickness_m the caller supplied. Fleet-level and
+    input-free calls pass nothing and get no net-to-gross warning.
+    ``band_reported`` attaches the Finding 12.5 disclosure when a P10-P90 band
+    is actually in the payload.
     """
     block = {k: (list(v) if isinstance(v, list) else v) for k, v in INTERPRETATION.items()}
     warnings: list[dict[str, Any]] = []
     if scenario is not None and any(a.is_literature_derived for a in scenario.assumptions):
         warnings.append(dict(SCALE_MISMATCH_WARNING))
+    if user_inputs is not None:
+        if user_inputs.net_to_gross is None:
+            warnings.append(dict(NET_TO_GROSS_UNDECLARED_WARNING))
+        elif user_inputs.net_to_gross.is_point:
+            warnings.append(dict(NET_TO_GROSS_POINT_WARNING))
+    if band_reported:
+        warnings.append(dict(UNCERTAINTY_BAND_WARNING))
     block["warnings"] = warnings
     return block
 
@@ -243,16 +326,265 @@ def validate_samples(samples: Any) -> int:
     return samples
 
 
+# -- thickness provenance (Phase 1: disclosure only) -------------------------
+#
+# net_to_gross records the ratio the caller's thickness_m implies. It is NOT an
+# Assumption: Assumption validates against ASSUMABLE, and ASSUMABLE feeds
+# SCENARIO_PARAMETERS, so registering it there would let a scenario assert a
+# net-to-gross it cannot know. See docs/net-to-gross-semantics.md section 4.
+
+
+class NetCriterion(str, Enum):
+    """What test defined "net" in the caller's thickness_m.
+
+    POROSITY_PERMEABILITY matches CSLF-T-2008-04's wording for E_h exactly --
+    "the geological unit that has the porosity and permeability required for
+    CO2 injection". The others are weaker or different measurements of the same
+    intent, and are recorded rather than rejected.
+    """
+
+    POROSITY_PERMEABILITY = "porosity_permeability"
+    POROSITY_ONLY = "porosity_only"
+    PERMEABILITY_ONLY = "permeability_only"
+    LITHOLOGY_NET_SAND = "lithology_net_sand"
+    FLOW_UNIT = "flow_unit"
+    UNSPECIFIED = "unspecified"
+
+
+class NetBasis(str, Enum):
+    """How the caller obtained the ratio."""
+
+    LOG_DERIVED = "log_derived"
+    CORE_DERIVED = "core_derived"
+    MODEL_DERIVED = "model_derived"
+    ANALOGUE = "analogue"
+    ASSUMED = "assumed"
+    UNKNOWN = "unknown"
+
+
+class ThicknessConvention(str, Enum):
+    """The convention shared by numerator and denominator.
+
+    The ratio is invariant to which one it is, provided both use the same.
+    Declared so a reader can tell that they did.
+    """
+
+    MEASURED = "measured"
+    TRUE_VERTICAL = "tvd"
+    TRUE_STRATIGRAPHIC = "tst"
+
+
+#: Reuses the existing evidence hierarchy rather than inventing a second one.
+NET_BASIS_EVIDENCE: dict[NetBasis, EvidenceClass] = {
+    NetBasis.LOG_DERIVED: EvidenceClass.SITE_SPECIFIC,
+    NetBasis.CORE_DERIVED: EvidenceClass.SITE_SPECIFIC,
+    NetBasis.MODEL_DERIVED: EvidenceClass.SITE_SPECIFIC,
+    NetBasis.ANALOGUE: EvidenceClass.REGIONAL,
+    NetBasis.ASSUMED: EvidenceClass.USER_INPUT,
+    NetBasis.UNKNOWN: EvidenceClass.UNSUPPORTED,
+}
+
+NET_BASIS_CONFIDENCE: dict[NetBasis, Confidence] = {
+    NetBasis.CORE_DERIVED: Confidence.HIGH,
+    NetBasis.LOG_DERIVED: Confidence.HIGH,
+    NetBasis.MODEL_DERIVED: Confidence.MEDIUM,
+    NetBasis.ANALOGUE: Confidence.LOW,
+    NetBasis.ASSUMED: Confidence.LOW,
+    NetBasis.UNKNOWN: Confidence.NONE,
+}
+
+NET_TO_GROSS_FIELDS = ("low", "high", "net_criterion", "net_basis",
+                       "cutoff_note", "thickness_convention")
+NET_TO_GROSS_REQUIRED = ("low", "high", "net_criterion", "net_basis")
+
+NET_TO_GROSS_DEFINITION = (
+    "Fraction of the gross formation interval that satisfies the caller's "
+    "declared reservoir-quality criterion, over the same interval from which "
+    "thickness_m was derived. Numerator and denominator must share a thickness "
+    "convention. NOT derived from the chronostratigraphic gross_thickness_m. "
+    "See docs/net-to-gross-semantics.md."
+)
+
+#: Stated in every thickness_provenance block, declared or not.
+NET_TO_GROSS_USAGE_STATEMENT = (
+    "net_to_gross is provenance metadata about thickness_m. It is recorded and "
+    "reported only: it is not used in any calculation, is never inferred, and "
+    "never adjusts thickness_m or capacity."
+)
+
+#: Emitted when the caller does not declare a net-to-gross. Mirrors
+#: SCALE_MISMATCH_WARNING: advisory, does not invalidate, applies no correction.
+NET_TO_GROSS_UNDECLARED_WARNING = {
+    "code": "net_to_gross_not_declared",
+    "severity": "advisory",
+    "message": (
+        "The net-to-gross implied by thickness_m was not declared."
+    ),
+    "detail": (
+        "thickness_m is a net thickness, but the ratio it bears to its gross "
+        "interval was not supplied, so this result cannot state what "
+        "net-to-gross it assumes. The adopted storage-efficiency range "
+        "(CSLF-T-2008-04) contains its own net-to-gross term, so the two may "
+        "overlap. No correction is applied and the reported capacity is "
+        "unaffected by this warning."
+    ),
+    "affects": ["thickness_m"],
+    "invalidates_result": False,
+    "correction_applied": False,
+    "reference": "docs/finding-3.1-literature-review.md",
+}
+
+#: Emitted when net_to_gross is declared as a point (low == high).
+NET_TO_GROSS_POINT_WARNING = {
+    "code": "net_to_gross_point_value",
+    "severity": "advisory",
+    "message": "net_to_gross was declared as a point value (low == high).",
+    "detail": (
+        "A point value states no uncertainty in the ratio; a (low, high) range "
+        "is preferred. net_to_gross is recorded only, so this does not change "
+        "the reported capacity or its P10-P90 band."
+    ),
+    "affects": ["thickness_m"],
+    "invalidates_result": False,
+    "correction_applied": False,
+    "reference": "docs/net-to-gross-semantics.md section 10",
+}
+
+#: Optional caller fields. Never required, never an Assumption.
+OPTIONAL_USER_INPUTS = ("net_to_gross",)
+
+
+def _coerce_enum(enum_cls, value, field_name: str):
+    if isinstance(value, enum_cls):
+        return value
+    accepted = ", ".join(m.value for m in enum_cls)
+    if not isinstance(value, str) or not value.strip():
+        raise ApiError(f"net_to_gross.{field_name} must be a non-empty string, "
+                       f"one of: {accepted}")
+    try:
+        return enum_cls(value.strip())
+    except ValueError:
+        raise ApiError(f"net_to_gross.{field_name}: unknown value {value!r} "
+                       f"(accepted: {accepted})") from None
+
+
+def _coerce_note(value) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ApiError(f"net_to_gross.cutoff_note must be a string, "
+                       f"got {type(value).__name__}")
+    text = value.strip()
+    if len(text) > 500:
+        raise ApiError("net_to_gross.cutoff_note must be at most 500 characters")
+    return text or None
+
+
+@dataclass(frozen=True)
+class NetToGross:
+    """The net-to-gross the caller's ``thickness_m`` implies.
+
+    Phase 1 records this and nothing else: it never enters the capacity
+    equation, never enters ``screening_inputs``, and is never inferred -- there
+    is deliberately no constructor that takes a well record. See
+    docs/net-to-gross-semantics.md for the canonical definition.
+    """
+
+    low: float
+    high: float
+    net_criterion: NetCriterion
+    net_basis: NetBasis
+    cutoff_note: str | None = None
+    thickness_convention: ThicknessConvention | None = None
+
+    def __post_init__(self) -> None:
+        problems: list[str] = []
+        for name in ("low", "high"):
+            value = getattr(self, name)
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                problems.append(f"net_to_gross.{name}: expected a number, "
+                                f"got {type(value).__name__} ({value!r})")
+                continue
+            number = float(value)
+            if number != number or number in (float("inf"), float("-inf")):
+                problems.append(f"net_to_gross.{name}: must be finite, got {value!r}")
+            elif not 0 < number <= 1:
+                problems.append(f"net_to_gross.{name}: must be in (0, 1], got {number:g}")
+        if not problems and self.low > self.high:
+            problems.append(
+                f"net_to_gross: low must be <= high, got ({self.low:g}, {self.high:g})"
+            )
+        if problems:
+            raise ApiError("; ".join(problems))
+        object.__setattr__(self, "low", float(self.low))
+        object.__setattr__(self, "high", float(self.high))
+        object.__setattr__(self, "net_criterion",
+                           _coerce_enum(NetCriterion, self.net_criterion, "net_criterion"))
+        object.__setattr__(self, "net_basis",
+                           _coerce_enum(NetBasis, self.net_basis, "net_basis"))
+        object.__setattr__(self, "cutoff_note", _coerce_note(self.cutoff_note))
+        if self.thickness_convention is not None:
+            object.__setattr__(self, "thickness_convention",
+                               _coerce_enum(ThicknessConvention, self.thickness_convention,
+                                            "thickness_convention"))
+
+    @property
+    def is_point(self) -> bool:
+        return self.low == self.high
+
+    @classmethod
+    def from_mapping(cls, data: Mapping[str, Any]) -> "NetToGross":
+        if not isinstance(data, Mapping):
+            raise ApiError(f"net_to_gross must be an object, got {type(data).__name__}")
+        unknown = sorted(set(data) - set(NET_TO_GROSS_FIELDS))
+        if unknown:
+            raise ApiError(f"unknown net_to_gross field(s): {', '.join(unknown)} "
+                           f"(accepted: {', '.join(NET_TO_GROSS_FIELDS)})")
+        missing = [k for k in NET_TO_GROSS_REQUIRED if data.get(k) is None]
+        if missing:
+            raise ApiError(
+                f"net_to_gross is missing required field(s): {', '.join(missing)}. "
+                f"A net-to-gross without a stated criterion and basis is the "
+                f"undocumented assumption this field exists to remove."
+            )
+        return cls(
+            low=data["low"], high=data["high"],
+            net_criterion=data["net_criterion"], net_basis=data["net_basis"],
+            cutoff_note=data.get("cutoff_note"),
+            thickness_convention=data.get("thickness_convention"),
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "low": self.low,
+            "high": self.high,
+            "unit": "-",
+            "net_criterion": self.net_criterion.value,
+            "net_basis": self.net_basis.value,
+            "evidence_class": NET_BASIS_EVIDENCE[self.net_basis].value,
+            "confidence": NET_BASIS_CONFIDENCE[self.net_basis].value,
+            "cutoff_note": self.cutoff_note,
+            "thickness_convention": (self.thickness_convention.value
+                                     if self.thickness_convention else None),
+            "is_point": self.is_point,
+            "used_in_calculation": False,
+            "definition": NET_TO_GROSS_DEFINITION,
+        }
+
+
 @dataclass(frozen=True)
 class UserInputs:
     """Caller-supplied geological inputs, validated.
 
-    Deliberately has no defaults: constructing one without both values is an
-    error, so there is no code path in which a screening runs on a filler.
+    Deliberately has no defaults for the two required inputs: constructing one
+    without both values is an error, so there is no code path in which a
+    screening runs on a filler. ``net_to_gross`` is optional provenance metadata
+    about ``thickness_m`` and is never used in a calculation.
     """
 
     area_m2: float
     thickness_m: float
+    net_to_gross: NetToGross | None = None
 
     def __post_init__(self) -> None:
         problems: list[str] = []
@@ -273,6 +605,9 @@ class UserInputs:
                     f"{name}: must be > {spec['minimum_exclusive']:g} {spec['unit']}, "
                     f"got {number:g}"
                 )
+        if self.net_to_gross is not None and not isinstance(self.net_to_gross, NetToGross):
+            problems.append(f"net_to_gross: expected NetToGross or None, "
+                            f"got {type(self.net_to_gross).__name__}")
         if problems:
             raise ApiError("; ".join(problems))
         object.__setattr__(self, "area_m2", float(self.area_m2))
@@ -284,11 +619,11 @@ class UserInputs:
         data = data or {}
         if not isinstance(data, Mapping):
             raise ApiError(f"user_inputs must be an object, got {type(data).__name__}")
-        unknown = sorted(set(data) - set(REQUIRED_USER_INPUTS))
+        unknown = sorted(set(data) - set(REQUIRED_USER_INPUTS) - set(OPTIONAL_USER_INPUTS))
         if unknown:
             raise ApiError(
                 f"unknown user input(s): {', '.join(unknown)} "
-                f"(accepted: {', '.join(REQUIRED_USER_INPUTS)})"
+                f"(accepted: {', '.join(REQUIRED_USER_INPUTS + OPTIONAL_USER_INPUTS)})"
             )
         missing = [n for n in REQUIRED_USER_INPUTS if n not in data]
         if missing:
@@ -297,7 +632,12 @@ class UserInputs:
                 f"These have no source data and no literature range, so they must "
                 f"be supplied explicitly; they are never inferred."
             )
-        return cls(area_m2=data["area_m2"], thickness_m=data["thickness_m"])
+        raw_ntg = data.get("net_to_gross")
+        return cls(
+            area_m2=data["area_m2"],
+            thickness_m=data["thickness_m"],
+            net_to_gross=NetToGross.from_mapping(raw_ntg) if raw_ntg is not None else None,
+        )
 
     def as_assumptions(self) -> tuple[Assumption, ...]:
         return tuple(
@@ -319,6 +659,20 @@ class UserInputs:
         return {
             name: {"value": getattr(self, name), "unit": USER_INPUT_SPEC[name]["unit"]}
             for name in REQUIRED_USER_INPUTS
+        }
+
+    def thickness_provenance(self) -> dict[str, Any]:
+        """How thickness_m was obtained. Metadata, never a model input."""
+        return {
+            "thickness_m": self.thickness_m,
+            "thickness_kind": ThicknessKind.NET_STORAGE.value,
+            "declared": self.net_to_gross is not None,
+            "net_to_gross_status": ("declared" if self.net_to_gross is not None
+                                    else "unknown -- not supplied by the caller"),
+            "net_to_gross": self.net_to_gross.to_dict() if self.net_to_gross else None,
+            "used_in_calculation": False,
+            "usage": NET_TO_GROSS_USAGE_STATEMENT,
+            "policy": NET_THICKNESS_POLICY_STATEMENT,
         }
 
 
@@ -491,6 +845,7 @@ def screen_well(well_id: str, user_inputs: Mapping[str, Any] | UserInputs | None
 
     active = _with_user_inputs(base, resolved_inputs)
     report = _screen_record(record, active, samples=samples, seed=seed)
+    band_reported = report.screenable and report.result is not None
 
     payload: dict[str, Any] = {
         "status": "screened" if report.screenable else "blocked",
@@ -500,7 +855,8 @@ def screen_well(well_id: str, user_inputs: Mapping[str, Any] | UserInputs | None
             "applied_as": active.name,
         },
         "user_inputs": resolved_inputs.to_dict(),
-        "interpretation": _interpretation(active),
+        "thickness_provenance": resolved_inputs.thickness_provenance(),
+        "interpretation": _interpretation(active, resolved_inputs, band_reported),
         "label_legend": dict(LABEL_LEGEND),
         "depth_m": report.depth_m,
         # Disjoint partition by label. A parameter appears in exactly one list,
@@ -513,7 +869,7 @@ def screen_well(well_id: str, user_inputs: Mapping[str, Any] | UserInputs | None
         "temperature": report.temperature.to_dict() if report.temperature else None,
         "conflicts": list(report.conflicts),
     }
-    if report.screenable and report.result is not None:
+    if band_reported:
         payload["scenario_based_capacity_mt"] = {
             "p10": report.result.p10_mt,
             "p50": report.result.p50_mt,
@@ -521,6 +877,9 @@ def screen_well(well_id: str, user_inputs: Mapping[str, Any] | UserInputs | None
             "mean": report.result.mean_mt,
             "n_samples": report.result.n_samples,
             "deterministic": report.result.deterministic,
+            # Disclosure only (Findings 7.5, 12.5); no value above is altered.
+            "percentile_convention": dict(PERCENTILE_CONVENTION),
+            "uncertainty_band": dict(UNCERTAINTY_BAND_DISCLOSURE),
         }
     else:
         payload["scenario_based_capacity_mt"] = None
@@ -551,7 +910,9 @@ def compare_temperature_methods(
     payload["status"] = "compared" if comparison.variants else "no_alternatives"
     payload["scenario"] = {"name": base.name, "version": base.version}
     payload["user_inputs"] = resolved_inputs.to_dict()
-    payload["interpretation"] = _interpretation(active)
+    payload["thickness_provenance"] = resolved_inputs.thickness_provenance()
+    payload["interpretation"] = _interpretation(active, resolved_inputs)
+    payload["percentile_convention"] = dict(PERCENTILE_CONVENTION)
     payload["note"] = (
         "No temperature method is authoritative. Temperature cannot be supplied "
         "as an engineering assumption; a well without a usable reservoir "

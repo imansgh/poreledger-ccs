@@ -280,7 +280,14 @@ def test_injectivity_is_absent_from_the_public_surface():
     from pathlib import Path
 
     root = Path(__file__).resolve().parents[1] / "src" / "ccs_screen"
+    # The net-to-gross criterion vocabulary names permeability as a *label* for
+    # what defined "net" (docs/net-to-gross-semantics.md section 3). It is not an
+    # injectivity input and carries no value, so only those tokens are exempt.
+    ntg_vocabulary = ("porosity_permeability", "permeability_only",
+                      "porosity and permeability")
     for name in ("api.py", "web/schemas.py"):
-        text = (root / name).read_text(encoding="utf-8")
-        assert "theis" not in text.lower()
-        assert "permeability" not in text.lower()
+        text = (root / name).read_text(encoding="utf-8").lower()
+        for token in ntg_vocabulary:
+            text = text.replace(token, "")
+        assert "theis" not in text
+        assert "permeability" not in text

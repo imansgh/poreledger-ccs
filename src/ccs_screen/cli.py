@@ -229,7 +229,9 @@ def _render(report: dict[str, Any]) -> str:
     lines += [
         "",
         "Capacity",
-        f"  P10 / P50 / P90            : {cap['p10']:.1f} / {cap['p50']:.1f} / {cap['p90']:.1f} Mt",
+        f"  P10 / P50 / P90            : {cap['p10']:.1f} / {cap['p50']:.1f} / {cap['p90']:.1f} Mt"
+        "  (low / median / high case)",
+        "  P10-P90 band               : sampled uncertainty only; excludes systematic/model bias",
         f"  mean                       : {cap['mean']:.1f} Mt",
         "",
         "Linear surrogate",

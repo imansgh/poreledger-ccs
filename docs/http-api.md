@@ -37,6 +37,38 @@ Request models use `extra="forbid"`, so an unrecognised field is rejected
 rather than ignored. That is what stops `temperature_k` being slipped in as an
 assumption: temperature is source-derived or the well stays blocked.
 
+### Optional: `net_to_gross` (provenance only)
+
+`user_inputs` may carry an optional `net_to_gross` block declaring the
+net-to-gross that `thickness_m` implies. It is **recorded and reported only**:
+it is not used in any calculation, never enters `screening_inputs`, is never an
+assumption a scenario can supply, and is never inferred -- not from
+`gross_thickness_m` and not from any record field. See
+`docs/net-to-gross-semantics.md`.
+
+```json
+"net_to_gross": {
+  "low": 0.30, "high": 0.55,                   // required, 0 < low <= high <= 1
+  "net_criterion": "porosity_permeability",    // required when present
+  "net_basis": "log_derived",                  // required when present
+  "cutoff_note": "free text, <= 500 chars",    // optional
+  "thickness_convention": "measured"           // optional: measured | tvd | tst
+}
+```
+
+`net_criterion`: `porosity_permeability`, `porosity_only`, `permeability_only`,
+`lithology_net_sand`, `flow_unit`, `unspecified`. `net_basis`: `log_derived`,
+`core_derived`, `model_derived`, `analogue`, `assumed`, `unknown`. A block
+without `net_criterion` and `net_basis`, with `low > high`, or with a bound
+outside `(0, 1]` is rejected. Values outside CSLF's 0.25-0.75 are accepted.
+
+The screen and temperature responses carry a `thickness_provenance` block with
+`declared`, `net_to_gross_status` (`"declared"` or `"unknown -- not supplied by
+the caller"`), the echoed `net_to_gross` (or `null`) and `used_in_calculation:
+false`. When it is not declared, `interpretation.warnings` includes the advisory
+`net_to_gross_not_declared`; a point value (`low == high`) earns
+`net_to_gross_point_value`. The fleet funnel emits neither.
+
 ## Status codes
 
 | Code | Meaning |
@@ -126,6 +158,22 @@ On a successful screen, the blocked-only fields (`reason`, `error`,
 `null`. `scenario_based_capacity_mt` is always present -- `null` when blocked --
 so a client reads the null rather than inferring it from absence.
 
+### Percentiles and the uncertainty band
+
+`p10`, `p50` and `p90` use the **statistical** convention: **P10 = low case,
+P50 = median case, P90 = high case**. This is not the petroleum reserves
+convention, in which P10 is the high case. Each screened
+`scenario_based_capacity_mt` states this in `percentile_convention`.
+
+The same block carries `uncertainty_band`: the P10-P90 interval is the model's
+sampled uncertainty band -- P10 the lower and P90 the upper sampled case of the
+Monte Carlo distribution. It does not necessarily contain systematic or model
+bias. Systematic biases identified by the scientific validation audit lie
+outside the Monte Carlo sampling uncertainty and may place the true value
+outside the reported P10-P90 interval (audit Finding 12.5). The same statement
+appears as the advisory `sampled_uncertainty_band_excludes_systematic_bias` in
+`interpretation.warnings`. Both are disclosure only; no value is adjusted.
+
 ## Example
 
 ```bash
@@ -145,13 +193,25 @@ curl -s -X POST http://localhost:8000/wells/SALUZZO%7C1/screen \
     "proven_resource": false,
     "warnings": [
       {"code": "scale_mismatch_basin_vs_closure", "severity": "advisory",
-       "invalidates_result": false, "correction_applied": false}
+       "invalidates_result": false, "correction_applied": false},
+      {"code": "net_to_gross_not_declared", "severity": "advisory", ...},
+      {"code": "sampled_uncertainty_band_excludes_systematic_bias",
+       "severity": "advisory", ...}
     ]
   },
+  "thickness_provenance": {"thickness_m": 35.0, "thickness_kind": "net_storage",
+                           "declared": false, "net_to_gross": null,
+                           "used_in_calculation": false, ...},
   "source_derived_inputs": ["temperature_k"],
   "modelled_inputs": ["pressure_pa"],
   "assumed_inputs": ["porosity", "storage_efficiency"],
   "user_supplied_inputs": ["area_m2", "thickness_m"],
-  "scenario_based_capacity_mt": {"p10": 5.28, "p50": 11.24, "p90": 21.9}
+  "scenario_based_capacity_mt": {
+    "p10": 5.28, "p50": 11.24, "p90": 21.9,
+    "percentile_convention": {"convention": "statistical", "p10": "low case -- ...",
+                              "p50": "median case -- ...", "p90": "high case -- ..."},
+    "uncertainty_band": {"code": "sampled_uncertainty_band_excludes_systematic_bias",
+                         "includes_systematic_bias": false, "values_adjusted": false, ...}
+  }
 }
 ```
