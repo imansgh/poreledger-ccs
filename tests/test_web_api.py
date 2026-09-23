@@ -15,6 +15,7 @@ import pytest
 
 from ccs_screen import api
 from ccs_screen.config import REQUIRED_FIELDS
+from ccs_screen.ingest.scenario import BUILTIN_SCENARIOS
 
 from test_ingest_pipeline import PO_WELLS, POZZI_STORICI, _write_xlsx
 
@@ -487,6 +488,22 @@ def test_scenario_path_is_rejected_over_http(client, scenario):
     assert response.status_code == 400
     assert response.json()["type"] == "ApiError"
     assert "built-in" in response.json()["error"]
+
+
+@pytest.mark.parametrize("alias", sorted(BUILTIN_SCENARIOS))
+def test_canonical_scenario_names_are_accepted(client, alias):
+    """/scenarios reports canonical names and the UI sends them back."""
+    canonical = BUILTIN_SCENARIOS[alias].name
+    for name in (alias, canonical, f"  {canonical.upper()} "):
+        response = client.get("/wells/SALUZZO|1/inputs", params={"scenario": name})
+        assert response.status_code == 200, name
+        assert response.json()["scenario"]["name"] == canonical
+
+
+def test_every_listed_scenario_is_accepted_over_http(client):
+    for entry in client.get("/scenarios").json():
+        response = client.get("/wells/SALUZZO|1/inputs", params={"scenario": entry["name"]})
+        assert response.status_code == 200, entry["name"]
 
 
 def test_scenario_path_is_rejected_on_screen(client):

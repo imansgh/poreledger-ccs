@@ -387,6 +387,54 @@ describe("error handling", () => {
     expect(await screen.findByText(/cannot reach the screening backend/i)).toBeInTheDocument();
   });
 
+  it("ignores a slow response for a well that is no longer selected", async () => {
+    stubHappyPath();
+    let resolveSlow: (value: typeof wellDetail) => void = () => {};
+    const slow = new Promise<typeof wellDetail>((resolve) => {
+      resolveSlow = resolve;
+    });
+    const other = { ...wellDetail, canonical_id: "CRESCENTINO|1" };
+    vi.spyOn(api, "getWell").mockImplementation((id: string) =>
+      id === "SALUZZO|1" ? slow : Promise.resolve(other),
+    );
+    const user = userEvent.setup();
+    render(<ScreeningWorkspace />);
+    await user.click(await screen.findByRole("button", { name: /SALUZZO\|1/ }));
+    await user.click(screen.getByRole("button", { name: /CRESCENTINO\|1/ }));
+    await screen.findByRole("heading", { name: /source data/i });
+
+    resolveSlow(wellDetail);
+    await slow;
+    await new Promise((r) => setTimeout(r, 0));
+    expect(api.getWell).toHaveBeenCalledWith("SALUZZO|1");
+    expect(screen.getByText("CRESCENTINO|1", { selector: "dd" })).toBeInTheDocument();
+    expect(screen.queryByText("SALUZZO|1", { selector: "dd" })).not.toBeInTheDocument();
+  });
+
+  it("re-fetches required inputs and drops the result when the scenario changes", async () => {
+    stubHappyPath();
+    const other = {
+      ...scenarios[0],
+      name: "central-placeholder",
+      aliases: ["central"],
+      literature_derived: false,
+    };
+    vi.spyOn(api, "listScenarios").mockResolvedValue([...scenarios, other]);
+    vi.spyOn(api, "screenWell").mockResolvedValue(screened);
+    const user = userEvent.setup();
+    render(<ScreeningWorkspace />);
+    await selectSaluzzo(user);
+    await fillInputs(user);
+    await user.click(screen.getByRole("button", { name: /run screening/i }));
+    await screen.findByText(/scenario-based storage capacity/i);
+
+    await user.selectOptions(screen.getByLabelText(/screening scenario/i), other.name);
+    await waitFor(() =>
+      expect(api.getRequiredInputs).toHaveBeenLastCalledWith("SALUZZO|1", other.name),
+    );
+    expect(screen.queryByText(/scenario-based storage capacity/i)).not.toBeInTheDocument();
+  });
+
   it("clears a stale result when another well is selected", async () => {
     stubHappyPath();
     vi.spyOn(api, "screenWell").mockResolvedValue(screened);

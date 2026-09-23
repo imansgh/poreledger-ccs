@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { InputForm } from "./InputForm";
 import { Notice } from "./Notice";
 import { ProvenancePanel } from "./ProvenancePanel";
@@ -57,6 +57,10 @@ export function ScreeningWorkspace() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Bumped whenever the well or scenario changes. A response is applied only
+  // if the generation it started under is still current, so a slow reply for
+  // a previous selection can never land beside the new one.
+  const generation = useRef(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -82,6 +86,7 @@ export function ScreeningWorkspace() {
 
   const selectWell = useCallback(
     async (wellId: string) => {
+      const gen = ++generation.current;
       setSelectedId(wellId);
       // A stale result beside a new well would be worse than no result.
       setResult(null);
@@ -94,27 +99,50 @@ export function ScreeningWorkspace() {
           getWell(wellId),
           getRequiredInputs(wellId, scenario),
         ]);
+        if (gen !== generation.current) return;
         setDetail(wellDetail);
         setInputs(requiredInputs);
       } catch (err) {
-        setError(messageFor(err));
+        if (gen === generation.current) setError(messageFor(err));
       }
     },
     [scenario],
   );
 
+  // Required inputs and blockers depend on the scenario, and so does any
+  // result already on screen: re-fetch the one and drop the others.
+  async function changeScenario(next: string) {
+    const gen = ++generation.current;
+    setScenario(next);
+    setResult(null);
+    setComparison(null);
+    setError(null);
+    if (!selectedId) return;
+    setInputs(null);
+    try {
+      const requiredInputs = await getRequiredInputs(selectedId, next);
+      if (gen === generation.current) setInputs(requiredInputs);
+    } catch (err) {
+      if (gen === generation.current) setError(messageFor(err));
+    }
+  }
+
   async function runScreening(values: UserInputValues) {
     if (!selectedId) return;
+    const gen = generation.current;
     setBusy(true);
     setError(null);
     setComparison(null);
     // Drop the previous number before the request starts, not after it lands.
     setResult(null);
     try {
-      setResult(await screenWell(selectedId, values, scenario));
+      const screened = await screenWell(selectedId, values, scenario);
+      if (gen === generation.current) setResult(screened);
     } catch (err) {
-      setResult(null);
-      setError(messageFor(err));
+      if (gen === generation.current) {
+        setResult(null);
+        setError(messageFor(err));
+      }
     } finally {
       setBusy(false);
     }
@@ -122,13 +150,17 @@ export function ScreeningWorkspace() {
 
   async function runTemperatureComparison(values: UserInputValues) {
     if (!selectedId) return;
+    const gen = generation.current;
     setBusy(true);
     setError(null);
     try {
-      setComparison(await compareTemperatureMethods(selectedId, values, scenario));
+      const compared = await compareTemperatureMethods(selectedId, values, scenario);
+      if (gen === generation.current) setComparison(compared);
     } catch (err) {
-      setComparison(null);
-      setError(messageFor(err));
+      if (gen === generation.current) {
+        setComparison(null);
+        setError(messageFor(err));
+      }
     } finally {
       setBusy(false);
     }
@@ -179,7 +211,7 @@ export function ScreeningWorkspace() {
             <InputForm
               scenarios={scenarios}
               scenario={scenario}
-              onScenarioChange={setScenario}
+              onScenarioChange={changeScenario}
               onSubmit={runScreening}
               onCompareTemperature={runTemperatureComparison}
               busy={busy}

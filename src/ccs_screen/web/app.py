@@ -108,13 +108,22 @@ def resolve_scenario_name(name: str) -> str:
     where an attacker can write a JSON file it becomes scenario injection.
 
     File-based scenarios remain available through the Python API and the CLI.
+
+    Both alias keys (``central``) and canonical names (``central-placeholder``,
+    as ``/scenarios`` reports them) are accepted; either resolves to an alias
+    key, so ``load_scenario`` never sees anything that could be a path.
     """
-    if name not in BUILTIN_SCENARIOS:
-        raise api.ApiError(
-            f"unknown scenario {name!r}. Over HTTP only built-in scenarios are "
-            f"accepted: {', '.join(sorted(BUILTIN_SCENARIOS))}."
-        )
-    return name
+    key = str(name).strip().lower()
+    if key in BUILTIN_SCENARIOS:
+        return key
+    for alias, scenario in BUILTIN_SCENARIOS.items():
+        if scenario.name.lower() == key:
+            return alias
+    accepted = sorted(set(BUILTIN_SCENARIOS) | {s.name for s in BUILTIN_SCENARIOS.values()})
+    raise api.ApiError(
+        f"unknown scenario {name!r}. Over HTTP only built-in scenarios are "
+        f"accepted: {', '.join(accepted)}."
+    )
 
 
 def _error_response(status: int, error: str, type_: str,
