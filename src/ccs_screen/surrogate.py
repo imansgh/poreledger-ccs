@@ -110,7 +110,12 @@ def evaluate(model: LinearSurrogate, samples: list[CapacitySample], masses_mt: n
     residual = pred - y
     ss_res = float(np.sum(residual**2))
     ss_tot = float(np.sum((y - y.mean()) ** 2))
-    r2 = 1.0 - ss_res / ss_tot if ss_tot > 0 else 1.0
+    # Same residue problem as the degenerate-feature check in the fit: for a
+    # constant response, y.mean() can differ from y by an ulp (numpy-version
+    # dependent), leaving ss_tot as residue and r2 as noise. Test the exact
+    # spread against the response's scale instead of ss_tot > 0.
+    constant = (y.max() - y.min()) <= 1e-12 * max(abs(float(y.mean())), 1.0)
+    r2 = 1.0 if constant or ss_tot <= 0 else 1.0 - ss_res / ss_tot
     return SurrogateMetrics(
         rmse_mt=float(np.sqrt(np.mean(residual**2))),
         mae_mt=float(np.mean(np.abs(residual))),

@@ -86,7 +86,8 @@ class ThicknessKind(str, Enum):
     Reconnaissance found only GROSS_STRATIGRAPHIC available (91-2557 m across
     the pilot wells), while the engine's ``thickness_m`` means NET_STORAGE
     (tens of metres). Substituting one for the other overstates capacity by
-    20-50x, so they are separate types and no code path converts between them.
+    1.5-128x across the observed range, so they are separate types and no code
+    path converts between them.
     """
 
     GROSS_STRATIGRAPHIC = "gross_stratigraphic"

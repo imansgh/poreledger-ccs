@@ -344,7 +344,13 @@ def resolve_inputs(
                 ),
                 rationale=(
                     "Normally-pressured hydrostatic assumption. No measured pressure "
-                    "exists in any source, so this is untested for this well."
+                    "exists in any source, so this is untested for this well. "
+                    f"z is the source depth as recorded (datum: {record.depth_datum.value}), "
+                    "not corrected to a sub-sea datum and not a reservoir reference "
+                    "depth. Where depths run from a rotary table standing above sea "
+                    "level, this overstates the brine column and therefore the "
+                    "pressure; the two datum elevations stated in the source "
+                    "documents are 120.0 m and 238.7 m, worth 1.2-2.6 MPa."
                 ),
                 evidence_class=EvidenceClass.GENERIC,
                 author=f"{scenario.name} v{scenario.version}",

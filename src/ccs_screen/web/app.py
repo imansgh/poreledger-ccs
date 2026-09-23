@@ -31,6 +31,7 @@ from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from ccs_screen import api
+from ccs_screen.ingest.scenario import BUILTIN_SCENARIOS
 from ccs_screen.web.schemas import (
     ErrorResponse,
     HealthResponse,
@@ -59,6 +60,8 @@ or gross stratigraphic thickness.
 Error mapping: `400` for a rejected domain request (`ApiError`), `404` for an
 unknown well, `413` for an oversized body, `422` for a schema violation
 (unknown field, wrong type, out-of-range `samples`).
+
+Only built-in scenario names are accepted over HTTP; a filesystem path is not.
 """
 
 _ERRORS: dict[int | str, dict[str, Any]] = {
@@ -93,6 +96,34 @@ class BodySizeLimitMiddleware(BaseHTTPMiddleware):
                 return _error_response(413, "request body too large", "PayloadTooLarge",
                                        f"limit is {self.max_bytes} bytes")
         return await call_next(request)
+
+
+def resolve_scenario_name(name: str) -> str:
+    """Accept only a built-in scenario name over HTTP.
+
+    ``ccs_screen.api`` also accepts a path to a scenario JSON file, which is
+    right for the CLI and for Python callers. Exposing that to HTTP would let a
+    request name any path on the server: even though the loader never returns
+    file contents, it is an existence-and-parseability oracle, and on a host
+    where an attacker can write a JSON file it becomes scenario injection.
+
+    File-based scenarios remain available through the Python API and the CLI.
+
+    Both alias keys (``central``) and canonical names (``central-placeholder``,
+    as ``/scenarios`` reports them) are accepted; either resolves to an alias
+    key, so ``load_scenario`` never sees anything that could be a path.
+    """
+    key = str(name).strip().lower()
+    if key in BUILTIN_SCENARIOS:
+        return key
+    for alias, scenario in BUILTIN_SCENARIOS.items():
+        if scenario.name.lower() == key:
+            return alias
+    accepted = sorted(set(BUILTIN_SCENARIOS) | {s.name for s in BUILTIN_SCENARIOS.values()})
+    raise api.ApiError(
+        f"unknown scenario {name!r}. Over HTTP only built-in scenarios are "
+        f"accepted: {', '.join(accepted)}."
+    )
 
 
 def _error_response(status: int, error: str, type_: str,
@@ -181,7 +212,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         scenario: str = Query(api.DEFAULT_SCENARIO, max_length=200),
     ) -> dict[str, Any]:
         """What the caller must supply before this well can be screened."""
-        return api.required_user_inputs(well_id, scenario=scenario, data_dir=config.data_dir)
+        return api.required_user_inputs(
+            well_id, scenario=resolve_scenario_name(scenario), data_dir=config.data_dir
+        )
 
     @app.get("/wells/{well_id:path}", responses=_ERRORS, tags=["wells"])
     def get_well(well_id: str = Path(..., description="Canonical id")) -> dict[str, Any]:
@@ -202,7 +235,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return api.screen_well(
             well_id,
             user_inputs=request.user_inputs.model_dump(),
-            scenario=request.scenario,
+            scenario=resolve_scenario_name(request.scenario),
             data_dir=config.data_dir,
             samples=request.samples,
             seed=request.seed,
@@ -218,7 +251,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return api.compare_temperature_methods(
             well_id,
             user_inputs=request.user_inputs.model_dump(),
-            scenario=request.scenario,
+            scenario=resolve_scenario_name(request.scenario),
             data_dir=config.data_dir,
             samples=request.samples,
             seed=request.seed,
@@ -239,8 +272,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         No user inputs, so this reports what the data alone supports: zero
         screenable wells.
         """
-        return api.screening_funnel(scenario=scenario, data_dir=config.data_dir,
-                                    samples=samples)
+        return api.screening_funnel(scenario=resolve_scenario_name(scenario),
+                                    data_dir=config.data_dir, samples=samples)
 
     return app
 

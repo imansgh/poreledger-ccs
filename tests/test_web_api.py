@@ -15,6 +15,7 @@ import pytest
 
 from ccs_screen import api
 from ccs_screen.config import REQUIRED_FIELDS
+from ccs_screen.ingest.scenario import BUILTIN_SCENARIOS
 
 from test_ingest_pipeline import PO_WELLS, POZZI_STORICI, _write_xlsx
 
@@ -460,3 +461,79 @@ def test_endpoints_are_sync_so_they_run_in_the_threadpool():
         assert not inspect.iscoroutinefunction(endpoint), (
             f"{route.path} is async and would block the event loop"
         )
+
+
+# -- scenario is not a filesystem path ---------------------------------------
+
+
+@pytest.mark.parametrize(
+    "scenario",
+    [
+        "examples/literature-screening-v1.json",
+        "/etc/passwd",
+        "../pyproject.toml",
+        "..\pyproject.toml",
+        "C:\Windows\win.ini",
+        "./README.md",
+    ],
+)
+def test_scenario_path_is_rejected_over_http(client, scenario):
+    """A path is not a scenario name.
+
+    ``ccs_screen.api`` accepts a scenario file path, which is right for the CLI.
+    Over HTTP it would be an existence-and-parseability oracle for arbitrary
+    server paths, so the web layer accepts built-in names only.
+    """
+    response = client.get("/wells/SALUZZO|1/inputs", params={"scenario": scenario})
+    assert response.status_code == 400
+    assert response.json()["type"] == "ApiError"
+    assert "built-in" in response.json()["error"]
+
+
+@pytest.mark.parametrize("alias", sorted(BUILTIN_SCENARIOS))
+def test_canonical_scenario_names_are_accepted(client, alias):
+    """/scenarios reports canonical names and the UI sends them back."""
+    canonical = BUILTIN_SCENARIOS[alias].name
+    for name in (alias, canonical, f"  {canonical.upper()} "):
+        response = client.get("/wells/SALUZZO|1/inputs", params={"scenario": name})
+        assert response.status_code == 200, name
+        assert response.json()["scenario"]["name"] == canonical
+
+
+def test_every_listed_scenario_is_accepted_over_http(client):
+    for entry in client.get("/scenarios").json():
+        response = client.get("/wells/SALUZZO|1/inputs", params={"scenario": entry["name"]})
+        assert response.status_code == 200, entry["name"]
+
+
+def test_scenario_path_is_rejected_on_screen(client):
+    response = client.post(
+        "/wells/SALUZZO|1/screen",
+        json={"user_inputs": {"area_m2": 8e7, "thickness_m": 35.0},
+              "scenario": "examples/literature-screening-v1.json", "samples": 50},
+    )
+    assert response.status_code == 400
+
+
+def test_builtin_scenario_names_still_work(client):
+    for name in ("literature-screening-v1", "central", "sensitivity", "none"):
+        response = client.get("/wells/SALUZZO|1/inputs", params={"scenario": name})
+        assert response.status_code == 200, name
+
+
+def test_well_id_is_never_a_filesystem_path(client):
+    """The well id is matched against canonical ids, never opened as a path.
+
+    Traversal probes end as 404 either from the route not matching (the client
+    normalises the path) or from the id lookup failing. What matters is that no
+    probe returns content.
+    """
+    for probe in ("../../../etc/passwd", "..%2F..%2Fpyproject.toml", "./README.md",
+                  "C:\Windows\win.ini"):
+        response = client.get(f"/wells/{probe}")
+        assert response.status_code == 404, probe
+        body = response.json()
+        if "type" in body:
+            assert body["type"] == "UnknownWellError", probe
+        assert "root:" not in response.text
+        assert "[project]" not in response.text

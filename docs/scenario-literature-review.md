@@ -216,7 +216,7 @@ the other.**
 
 The sources provide gross chronostratigraphic intervals (91-2,557 m across the
 pilot wells). The engine's `thickness_m` means net storage thickness. Using one
-for the other overstates capacity by roughly 20-50x.
+for the other overstates capacity by 1.5x to 128x across the observed range.
 
 Donda et al. (2011) state the relationship explicitly:
 
