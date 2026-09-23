@@ -6,11 +6,30 @@ Two details matter for CCS screening and are handled explicitly here:
    roots. Picking the densest one unconditionally returns a liquid density in
    the vapour region (an order-of-magnitude error). The physical root is the
    one with the lower fugacity, i.e. the lower molar Gibbs energy.
-2. **Volume translation.** Untranslated Peng-Robinson under-predicts dense-phase
-   CO2 density by 7-10%, and storage mass is linear in density. A constant
-   Peneloux shift brings the 12-30 MPa / 320-355 K window to within a few
-   percent. It slightly over-corrects near the critical point; see
-   ``tests/test_properties.py`` for the validated envelope.
+2. **Volume translation.** Untranslated Peng-Robinson under-predicts CO2 density
+   at moderate pressure, and storage mass is linear in density, so a constant
+   Peneloux shift is applied.
+
+   Measured envelope against Span & Wagner (1996) over 140 points,
+   P = 1-35 MPa and T = 280-400 K (see ``docs/scientific-validation-audit.md``,
+   Phase 1):
+
+   ===========================  ==========  ========  =======
+   Configuration                mean |err|  median    max
+   ===========================  ==========  ========  =======
+   Peneloux shift applied            4.06%     2.86%   13.98%
+   No volume translation             2.59%     1.99%   16.67%
+   ===========================  ==========  ========  =======
+
+   The shift lowers the worst case but raises the typical error: untranslated
+   PR is closer at 108 of the 140 points. It helps below roughly 15 MPa and
+   degrades above 20 MPa, where a constant shift over-corrects -- at
+   35 MPa / 300 K it turns a +3.8% error into +11.8%.
+
+   It is kept because most Italian pilot reservoirs sit below 20 MPa, but this
+   is a screening-grade compromise, not an accuracy improvement everywhere.
+   Flagged REVIEW REQUIRED in the Phase 1 audit; a temperature-dependent shift
+   is the standard remedy and has not been implemented.
 """
 
 from __future__ import annotations

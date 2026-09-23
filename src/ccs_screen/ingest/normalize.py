@@ -373,11 +373,14 @@ class WellNormalizer:
         conflicts: tuple[Conflict, ...] = ()
         if alternatives:
             spread = max(t.temperature_k for t in near_td) - min(t.temperature_k for t in near_td)
+            depth_span = max(t.depth_m for t in near_td) - min(t.depth_m for t in near_td)
             conflicts = (Conflict(
                 field_name="temperature_k",
                 chosen=round(chosen.temperature_k, 2),
                 alternatives=alternatives,
-                note=(f"methods disagree by {spread:.1f} K at comparable depth; "
+                note=(f"values differ by {spread:.1f} K across {depth_span:.0f} m of depth; "
+                      f"part of that spread is the geothermal gradient, not method "
+                      f"disagreement, and no depth correction is applied; "
                       f"selected the best-ranked reservoir method"),
             ),)
             rec.conflicts = rec.conflicts + conflicts

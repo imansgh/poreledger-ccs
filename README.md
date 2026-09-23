@@ -182,6 +182,102 @@ the request is rejected, never filled in. Every response carries an
 `interpretation` block marking the number as scenario-based, not site-specific,
 not certified. See [docs/http-api.md](docs/http-api.md).
 
+## Web interface
+
+A Next.js + TypeScript frontend that puts the provenance audit trail on screen
+beside the number, not behind it.
+
+**Backend** (terminal 1):
+
+```bash
+pip install -e ".[dev,web]"
+CCS_CORS_ORIGINS=http://localhost:3000 uvicorn ccs_screen.web.app:app --reload
+```
+
+**Frontend** (terminal 2):
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Open http://localhost:3000.
+
+Configure the backend URL with `NEXT_PUBLIC_CCS_API_URL` (see
+`frontend/.env.example`):
+
+```
+NEXT_PUBLIC_CCS_API_URL=http://127.0.0.1:8000
+```
+
+CORS is off in the backend until `CCS_CORS_ORIGINS` names an origin, so the
+frontend cannot reach it until you set that variable.
+
+Storage area and net reservoir thickness are required inputs with **no
+defaults**. Every screening input is shown in one of four categories --
+source-derived, modelled, literature-constrained, user input -- each labelled in
+text, not colour alone.
+
+This is a screening tool and a work in progress. It is not production-ready and
+produces no certified or site-specific storage estimate.
+
+## Deployment
+
+Not deployed anywhere, and not production-hardened: there is **no
+authentication and no rate limiting**. Treat what follows as the minimum a
+deployment needs, not a claim that it is finished.
+
+### Backend
+
+```bash
+pip install ".[ingest,web]"
+
+CCS_DATA_DIR=/srv/ccs/data CCS_CORS_ORIGINS=https://your-frontend.example CCS_DOCS=0 uvicorn ccs_screen.web.app:app --host 0.0.0.0 --port 8000 --workers 4
+```
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `CCS_DATA_DIR` | `data` | directory holding the structured sources |
+| `CCS_CORS_ORIGINS` | *(empty)* | comma-separated allowed origins; **no wildcard default** |
+| `CCS_MAX_BODY_BYTES` | `16384` | JSON request body cap (413 above it) |
+| `CCS_WARM_CACHE` | `1` | normalize at startup so the first request is not slow |
+| `CCS_DOCS` | `1` | set `0` to disable `/docs` and `/redoc` |
+
+See `.env.example`. No secrets are required.
+
+**CORS is off until you name origins.** An unset `CCS_CORS_ORIGINS` blocks every
+cross-origin browser request, so the frontend will not work until it is set to
+the exact origin the frontend is served from.
+
+**Rate limiting is not implemented** and should be handled by the reverse proxy
+or API gateway. Doing it in-process would need state shared across workers; an
+in-process counter would be wrong the moment a second worker started. What *is*
+enforced in-process: the body cap, and `samples <= 50000` bounding CPU per
+request.
+
+### Frontend
+
+`NEXT_PUBLIC_CCS_API_URL` is inlined at **build** time, not read at runtime, so
+it must be set before `npm run build`:
+
+```bash
+cd frontend
+npm ci
+NEXT_PUBLIC_CCS_API_URL=https://your-backend.example npm run build
+npm run start   # or serve the build output behind your own server
+```
+
+The browser calls that URL directly, so it must be reachable from the visitor's
+machine and must appear in the backend's `CCS_CORS_ORIGINS`. A production build
+made without the variable falls back to `http://127.0.0.1:8000` and shows a
+visible warning in the UI rather than failing silently.
+
+### Development
+
+The commands under [Web interface](#web-interface) above are **development**
+instructions: they bind to localhost, enable `/docs`, and use `--reload`.
+
 ## Next (on purpose left out)
 
 Two-phase plume, residual/solubility trapping, caprock geomechanics, well integrity. Those are the follow-on if this repo stays the CCS public project.
@@ -192,6 +288,7 @@ Two-phase plume, residual/solubility trapping, caprock geomechanics, well integr
 src/ccs_screen/    properties, capacity, pressure, monte_carlo, surrogate, config,
                    api, cli
 src/ccs_screen/web/      FastAPI app, Pydantic schemas, settings
+frontend/          Next.js + TypeScript UI (app, components, lib, tests)
 src/ccs_screen/ingest/   provenance, identity, units, records, sources,
                          normalize, completeness, assumptions,
                          scenario, report, cli

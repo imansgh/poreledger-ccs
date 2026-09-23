@@ -174,8 +174,9 @@ density -- and therefore capacity, which is linear in density -- by **6.4% to
 
 The sources give only gross intervals: 91-2,557 m across the pilot wells, against
 the engine's representative net thickness of 25-55 m. Substituting one for the
-other overstates capacity by roughly **20-50x**, and the result would look
-entirely plausible.
+other overstates capacity by **1.5x to 128x** depending on which pair you take
+(a 91 m gross against 60 m net is only 1.5x; 2,557 m against 20 m is 128x), and
+the result would look entirely plausible.
 
 `gross_thickness_m` is therefore a separate field, and **no code path converts it
 to `thickness_m`**. `ScreeningConfig.thickness_m` is left unrenamed for now; the

@@ -1,0 +1,364 @@
+/*
+ * Restrained technical styling for a subsurface decision-support tool.
+ * Tokens are defined once on :root, redefined for dark. No gradients, no
+ * animation beyond a 120ms state change.
+ */
+
+:root {
+  --bg: #f7f7f5;
+  --panel: #ffffff;
+  --panel-alt: #fbfbfa;
+  --ink: #17191c;
+  --ink-soft: #52575e;
+  --ink-faint: #858b93;
+  --line: #dcdedf;
+  --line-strong: #c2c6c9;
+
+  /* Provenance accents. Always paired with a text label, never used alone. */
+  --source: #1f5f4f;
+  --source-bg: #e6f1ed;
+  --modelled: #1d4f78;
+  --modelled-bg: #e5eef5;
+  --assumed: #7a5210;
+  --assumed-bg: #f6efe0;
+  --user: #5b2d82;
+  --user-bg: #f0e9f6;
+  --warn: #8a5a00;
+  --warn-bg: #fdf4e3;
+  --stop: #8c2f2f;
+  --stop-bg: #f8eaea;
+
+  --mono: ui-monospace, "SFMono-Regular", "Cascadia Mono", Menlo, Consolas, monospace;
+  --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --radius: 4px;
+}
+
+:root:not([data-theme="light"]) {
+  @media (prefers-color-scheme: dark) {
+    --bg: #131517;
+    --panel: #1a1d20;
+    --panel-alt: #16191b;
+    --ink: #e8eaec;
+    --ink-soft: #a8aeb5;
+    --ink-faint: #767d85;
+    --line: #2a2e33;
+    --line-strong: #3a4046;
+
+    --source: #6fcfb2;
+    --source-bg: #14261f;
+    --modelled: #7cb8e8;
+    --modelled-bg: #142230;
+    --assumed: #e0b15e;
+    --assumed-bg: #2a2214;
+    --user: #c39ae8;
+    --user-bg: #241a2e;
+    --warn: #e8bc6a;
+    --warn-bg: #2b2415;
+    --stop: #e58c8c;
+    --stop-bg: #2c1a1a;
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg: #131517;
+  --panel: #1a1d20;
+  --panel-alt: #16191b;
+  --ink: #e8eaec;
+  --ink-soft: #a8aeb5;
+  --ink-faint: #767d85;
+  --line: #2a2e33;
+  --line-strong: #3a4046;
+  --source: #6fcfb2;
+  --source-bg: #14261f;
+  --modelled: #7cb8e8;
+  --modelled-bg: #142230;
+  --assumed: #e0b15e;
+  --assumed-bg: #2a2214;
+  --user: #c39ae8;
+  --user-bg: #241a2e;
+  --warn: #e8bc6a;
+  --warn-bg: #2b2415;
+  --stop: #e58c8c;
+  --stop-bg: #2c1a1a;
+}
+
+* { box-sizing: border-box; }
+
+/* Nothing may widen the viewport. Long well ids, citations and derivations are
+ * monospace and unbroken, so wrapping is opt-in everywhere it matters. */
+html, body { max-width: 100%; overflow-x: hidden; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3 { margin: 0; font-weight: 600; letter-spacing: -0.01em; }
+h1 { font-size: 17px; }
+h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--ink-soft); }
+h3 { font-size: 14px; }
+p { margin: 0 0 8px; }
+
+a { color: var(--modelled); }
+
+:focus-visible {
+  outline: 2px solid var(--modelled);
+  outline-offset: 2px;
+}
+
+/* -- layout ------------------------------------------------------------- */
+
+.shell { max-width: 1400px; margin: 0 auto; padding-block: 20px; padding-inline: 16px; }
+
+.masthead {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: baseline;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--line-strong);
+  padding-bottom: 12px;
+  margin-bottom: 18px;
+}
+.masthead .sub { color: var(--ink-faint); font-size: 12px; font-family: var(--mono); }
+
+/* Desktop: well/inputs + result on top, provenance + warnings below. */
+.grid {
+  display: grid;
+  gap: 16px;
+  /* minmax(0, 1fr) on the right column: a 1fr track has min-width auto by
+   * default, which lets wide content stretch the grid past the viewport. */
+  grid-template-columns: minmax(280px, 380px) minmax(0, 1fr);
+  align-items: start;
+}
+@media (max-width: 900px) {
+  .grid { grid-template-columns: minmax(0, 1fr); }
+}
+
+@media (max-width: 520px) {
+  /* Comfortable tap targets and no zoom-on-focus in iOS Safari, which
+   * triggers below a 16px font size. */
+  input[type="text"], input[type="number"], input[type="search"], select {
+    font-size: 16px;
+    padding: 10px;
+  }
+  button { width: 100%; padding: 11px 14px; }
+  .percentiles { gap: 14px; }
+  .shell { padding-inline: 12px; }
+}
+
+.stack { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+
+.panel {
+  min-width: 0;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 14px;
+}
+.panel > h2 { margin-bottom: 10px; }
+
+/* -- controls ----------------------------------------------------------- */
+
+label { display: block; font-size: 12px; font-weight: 600; margin-bottom: 4px; }
+.hint { font-size: 12px; color: var(--ink-faint); margin: 4px 0 0; }
+
+input[type="text"], input[type="number"], input[type="search"], select {
+  width: 100%;
+  padding: 7px 9px;
+  font: inherit;
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--ink);
+  background: var(--panel-alt);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+}
+input[aria-invalid="true"] { border-color: var(--stop); }
+
+button {
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 14px;
+  color: var(--panel);
+  background: var(--ink);
+  border: 1px solid var(--ink);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: opacity 120ms ease;
+}
+button:hover:not(:disabled) { opacity: 0.85; }
+button:disabled { opacity: 0.45; cursor: not-allowed; }
+button.secondary { background: transparent; color: var(--ink); border-color: var(--line-strong); }
+
+.field { margin-bottom: 14px; }
+.field-error { color: var(--stop); font-size: 12px; margin-top: 4px; font-weight: 600; }
+
+/* -- well list ---------------------------------------------------------- */
+
+.well-list { list-style: none; margin: 10px 0 0; padding: 0; max-height: 380px; overflow-y: auto; }
+.well-list li { margin-bottom: 4px; }
+.well-row {
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  color: var(--ink);
+  border: 1px solid transparent;
+  padding: 7px 9px;
+  font-weight: 500;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: baseline;
+}
+.well-row:hover { background: var(--panel-alt); border-color: var(--line); }
+.well-row[aria-current="true"] { background: var(--panel-alt); border-color: var(--line-strong); }
+.well-row .id { font-family: var(--mono); font-size: 13px; overflow-wrap: anywhere; min-width: 0; }
+.well-row .meta { font-size: 11px; color: var(--ink-faint); font-family: var(--mono); white-space: nowrap; }
+
+/* -- key/value ---------------------------------------------------------- */
+
+.kv { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 14px; font-size: 13px; }
+.kv dt { color: var(--ink-faint); }
+.kv dd { margin: 0; font-family: var(--mono); overflow-wrap: anywhere; min-width: 0; }
+.unavailable { color: var(--ink-faint); font-style: italic; font-family: var(--sans); }
+
+/* -- result ------------------------------------------------------------- */
+
+.result-head { border-bottom: 1px solid var(--line); padding-bottom: 12px; margin-bottom: 12px; }
+.result-label { font-size: 12px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--ink-soft); }
+.result-value {
+  font-family: var(--mono);
+  /* Scales down on a narrow screen so a 5-digit value cannot overflow. */
+  font-size: clamp(28px, 9vw, 40px);
+  font-weight: 600;
+  line-height: 1.1;
+  margin: 4px 0 2px;
+  overflow-wrap: anywhere;
+}
+.result-value .unit { font-size: 18px; color: var(--ink-soft); margin-left: 6px; }
+.result-caveat { font-size: 12px; color: var(--ink-soft); }
+
+/*
+ * The qualifier sits directly under the headline number, in flow. It is not
+ * collapsible and not a tooltip: the number must not be readable without it.
+ */
+.result-qualifier {
+  margin-top: 10px;
+  padding: 9px 11px;
+  border: 1px solid var(--line-strong);
+  border-left: 3px solid var(--warn);
+  border-radius: var(--radius);
+  background: var(--warn-bg);
+  color: var(--warn);
+  font-size: 12.5px;
+}
+.result-qualifier p { margin: 0; }
+.result-qualifier .qualifier-inputs { margin-top: 4px; opacity: 0.95; }
+
+/* Static placeholders -- the status text carries the state, not motion. */
+.skeleton { background: var(--line); border-radius: var(--radius); }
+.skeleton-value { height: 40px; width: min(220px, 70%); margin: 10px 0 12px; }
+.skeleton-line { height: 12px; width: 100%; max-width: 420px; margin-bottom: 8px; }
+.skeleton-line.short { width: min(60%, 240px); }
+
+.percentiles { display: flex; flex-wrap: wrap; gap: 20px; margin-top: 12px; }
+.percentiles div { min-width: 70px; }
+.percentiles dt { font-size: 11px; color: var(--ink-faint); text-transform: uppercase; letter-spacing: 0.06em; }
+.percentiles dd { margin: 2px 0 0; font-family: var(--mono); font-size: 18px; font-weight: 600; }
+
+/* -- provenance --------------------------------------------------------- */
+
+.bucket { margin-bottom: 18px; }
+.bucket:last-child { margin-bottom: 0; }
+.bucket-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; margin-bottom: 2px; }
+.bucket-desc { font-size: 12px; color: var(--ink-faint); margin-bottom: 8px; }
+
+/* minmax(0, ...) so a long unbroken string cannot force a track wider than
+ * the container, which is the usual cause of grid overflow on phones. */
+.cards {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(min(230px, 100%), 1fr));
+}
+
+.card {
+  border: 1px solid var(--line);
+  border-left-width: 3px;
+  border-radius: var(--radius);
+  padding: 10px 11px;
+  background: var(--panel-alt);
+}
+.card-name { font-size: 12px; color: var(--ink-soft); }
+.card-value {
+  font-family: var(--mono);
+  font-size: clamp(16px, 4.5vw, 19px);
+  font-weight: 600;
+  margin: 1px 0 6px;
+  overflow-wrap: anywhere;
+}
+.card-value .unit { font-size: 12px; color: var(--ink-soft); margin-left: 4px; font-weight: 500; }
+.card dl { margin: 6px 0 0; font-size: 11.5px; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 2px 8px; }
+.card dt { color: var(--ink-faint); }
+.card dd { margin: 0; overflow-wrap: anywhere; min-width: 0; }
+.card .note { font-size: 11.5px; color: var(--ink-soft); margin-top: 6px; overflow-wrap: anywhere; }
+.card cite { font-size: 11.5px; color: var(--ink-soft); display: block; margin-top: 6px; font-style: normal; }
+
+/* The tag carries the label as text; colour is decoration only. */
+.tag {
+  display: inline-block;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  padding: 2px 6px;
+  border-radius: 3px;
+  border: 1px solid currentColor;
+}
+.tag-source { color: var(--source); background: var(--source-bg); }
+.tag-modelled { color: var(--modelled); background: var(--modelled-bg); }
+.tag-assumed { color: var(--assumed); background: var(--assumed-bg); }
+.tag-user { color: var(--user); background: var(--user-bg); }
+
+.card-source { border-left-color: var(--source); }
+.card-modelled { border-left-color: var(--modelled); }
+.card-assumed { border-left-color: var(--assumed); }
+.card-user { border-left-color: var(--user); }
+
+/* -- notices ------------------------------------------------------------ */
+
+.notice {
+  border: 1px solid var(--line-strong);
+  border-left-width: 3px;
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  margin-bottom: 10px;
+  font-size: 13px;
+}
+.notice:last-child { margin-bottom: 0; }
+.notice-advisory { border-left-color: var(--warn); background: var(--warn-bg); color: var(--warn); }
+.notice-stop { border-left-color: var(--stop); background: var(--stop-bg); color: var(--stop); }
+.notice-plain { border-left-color: var(--line-strong); background: var(--panel-alt); color: var(--ink-soft); }
+.notice strong { display: block; margin-bottom: 3px; }
+.notice p { margin: 0; overflow-wrap: anywhere; }
+.notice .detail { margin-top: 6px; font-size: 12px; opacity: 0.9; }
+
+/* -- table -------------------------------------------------------------- */
+
+.table-wrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--line); }
+th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-faint); font-weight: 600; }
+td { font-family: var(--mono); }
+tr[data-selected="true"] td { font-weight: 700; }
+
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}

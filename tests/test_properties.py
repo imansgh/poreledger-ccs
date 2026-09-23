@@ -1,8 +1,18 @@
 """Phase-behaviour and accuracy checks for the Peng-Robinson CO2 density.
 
-Reference densities are Span-Wagner (NIST Webbook) values. Peng-Robinson is a
-screening EOS, so the tolerances below are deliberately loose; they exist to
-catch a wrong *root* (an 18x error) rather than to certify the EOS.
+Reference densities are Span & Wagner (1996) values, retrieved from CoolProp
+8.0.0 (HEOS backend) during the Phase 1 scientific audit and recorded here so
+the suite needs no extra dependency.
+
+An earlier version of this file carried values transcribed from memory, eight
+of nine of which were wrong -- the worst by 9.33%, which made one assertion
+pass for the wrong reason. Every value below is machine-verified; see
+``docs/scientific-validation-audit.md``, Phase 1, Finding 1.2.
+
+Peng-Robinson is a screening EOS, so the tolerances are deliberately loose:
+they exist to catch a wrong *root* (an 18x error) rather than to certify the
+EOS. The measured accuracy envelope is documented in the audit, not asserted
+here point by point.
 """
 
 import math
@@ -12,22 +22,23 @@ import pytest
 from ccs_screen.properties import co2_density_kg_m3
 
 # (pressure_pa, temperature_k, span_wagner_kg_m3)
+# Verified against CoolProp 8.0.0 HEOS (= Span & Wagner 1996), Phase 1 audit.
 SUBCRITICAL_GAS = [
-    (2.0e6, 280.0, 43.6),   # Psat(280 K) = 4.16 MPa -> vapour
-    (3.0e6, 280.0, 70.9),
-    (4.0e6, 290.0, 101.6),  # Psat(290 K) = 5.36 MPa -> vapour
+    (2.0e6, 280.0, 43.8),   # Psat(280 K) = 4.16 MPa -> vapour
+    (3.0e6, 280.0, 72.8),
+    (4.0e6, 290.0, 100.5),  # Psat(290 K) = 5.36 MPa -> vapour
 ]
 
 SUBCRITICAL_LIQUID = [
-    (5.0e6, 280.0, 883.6),
-    (8.0e6, 290.0, 796.6),
+    (5.0e6, 280.0, 893.9),
+    (8.0e6, 290.0, 854.2),
 ]
 
 DENSE_PHASE = [
-    (12.0e6, 320.0, 617.7),
-    (15.0e6, 333.15, 604.3),
-    (20.0e6, 340.0, 692.4),
-    (30.0e6, 350.0, 829.8),
+    (12.0e6, 320.0, 632.2),
+    (15.0e6, 333.15, 604.1),
+    (20.0e6, 340.0, 679.7),
+    (30.0e6, 350.0, 759.0),
 ]
 
 
