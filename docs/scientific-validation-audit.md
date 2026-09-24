@@ -1165,41 +1165,163 @@ suffix does not by itself establish a deviation geometry.
 **Not decided here:** whether to convert depths to vertical depth in the model,
 and the TRECATE|9|ST depth reference.
 
-### Finding 4.5 -- the fracture gradient is physically sensible but uncited
+### Finding 4.5 -- Fracture-gradient default is uncited, depth-independent, and not verified against well records
 
-**PASS WITH CAVEAT. Severity LOW.**
+**REVIEW REQUIRED. Severity under review.** Arithmetic and implementation
+confirmed; the original depth-trend interpretation is contradicted by the
+implemented equations; the gradient value has no source (evidence gap); the
+MALOSSA|15 drilling record challenges its general applicability. *(Original
+title "the fracture gradient is physically sensible but uncited" and original
+status "PASS WITH CAVEAT", both superseded. The current framing is* Finding 4.5
+revision *at the end of this finding.)*
 
-`DEFAULT_FRACTURE_GRADIENT_PA_M = 15 000 Pa/m`. Converted independently:
+**Implementation.** `DEFAULT_FRACTURE_GRADIENT_PA_M = 15 000 Pa/m`
+(`pressure.py:15`), commented only as "Typical fracture gradient for a
+normally-pressured clastic sequence". It is a default, user-overridable within
+the configured range 0-50 000 Pa/m (`config.py:71`). Fracture pressure is
+`P_frac = G_f * z` (`pressure.py:97`) and headroom is
+`max(SF * P_frac - P_init, 0)` (`pressure.py:114-115`). Both are used only in
+the CLI injectivity path (`cli.py:183-208`); the API and frontend do not
+compute them.
 
-- `15 000 Pa/m x 0.3048 m/ft / 6894.757 Pa/psi` = **0.6631 psi/ft**, inside the
-  0.6-0.8 psi/ft band normally quoted for normally-pressured clastic sequences.
-- Equivalent mud weight `15 000 / 9.80665` = **1529.6 kg/m3 = 1.530 SG**, a
-  routine value.
+**Arithmetic conversion (confirmed).**
 
-Resulting fracture-to-hydrostatic ratios are physically sensible and decline
-with depth as expected:
+- `15 000 Pa/m x 0.3048 m/ft / 6894.757 Pa/psi` = **0.6631 psi/ft**.
+- Equivalent mud weight `15 000 / 9.80665` = **1529.6 kg/m3 = 1.530 SG**.
 
-| Case | P_frac | P_hyd | Ratio | Headroom |
-| --- | --- | --- | --- | --- |
-| Shallow pilot | 13.455 MPa | 8.972 MPa | 1.500 | 3.137 MPa |
-| SALUZZO-like | 22.913 MPa | 15.729 MPa | 1.457 | 4.893 MPa |
-| Mid | 45.000 MPa | 31.185 MPa | 1.443 | 9.315 MPa |
-| Deep pilot | 100.410 MPa | 72.210 MPa | 1.391 | 18.159 MPa |
+*As originally written:* the value is "inside the 0.6-0.8 psi/ft band normally
+quoted for normally-pressured clastic sequences", and 1.530 SG is "a routine
+value". *Revised:* both are engineering judgment. The repository cites no
+source for the 0.6-0.8 psi/ft band, or for "routine".
+
+**Fracture-to-hydrostatic ratio (corrected).** *As originally written:*
+"Resulting fracture-to-hydrostatic ratios are physically sensible and decline
+with depth as expected", and "the ratio drifting from 1.50 to 1.39 across the
+depth range is an artefact of the constant, not a modelled compaction trend".
+*Corrected:* with `P_frac = G_f * z` and `P_hyd = rho * g * z`,
+
+    P_frac / P_hyd = G_f / (rho * g)
+
+which does not depend on depth. For a fixed brine density the ratio is the same
+at every depth; the model contains no depth or compaction trend. The drift in
+the table below comes only from the different brine densities assigned to the
+four synthetic cases. That the ratio exceeds 1 for every density in the
+scenario range (1020-1100 kg/m3, giving 1.391-1.500) is demonstrated, and is a
+necessary condition for an injection window. It does not establish that
+15 000 Pa/m is correct for any real well.
+
+These are evidence and sensitivity results, not model corrections.
+
+Synthetic Phase 4 cases (tests/test_pressure_audit.py `CASES`; not wells). The
+ratio in each row equals `15 000 / (rho g)` for that row's assigned density:
+
+| Case | rho (kg/m3) | z (m) | P_frac | P_hyd | Ratio | Headroom |
+| --- | --- | --- | --- | --- | --- | --- |
+| Shallow pilot | 1020 | 897 | 13.455 MPa | 8.972 MPa | 1.500 | 3.137 MPa |
+| SALUZZO-like | 1050 | 1527.5 | 22.913 MPa | 15.729 MPa | 1.457 | 4.893 MPa |
+| Mid | 1060 | 3000 | 45.000 MPa | 31.185 MPa | 1.443 | 9.315 MPa |
+| Deep pilot | 1100 | 6694 | 100.410 MPa | 72.210 MPa | 1.391 | 18.159 MPa |
+
+At a fixed rho = 1050 kg/m3 the ratio is 1.4567 at all four depths
+(897, 1527.5, 3000 and 6694 m).
+
+- CLI shipped defaults (depth 2000 m, P_init = midpoint of 12-20 MPa = 16 MPa):
+  P_frac 30.0 MPa, ratio 1.875, headroom 11.0 MPa (Finding 5.2).
+- If an emitted well config is run through the CLI (P_init = 1060 g z, the
+  midpoint of the 1020-1100 prior): ratio 1.443 for every well; headroom
+  SALUZZO|1 4.743, ASTI|1 3.872, DESANA|1 10.013, MALOSSA|15 17.049,
+  TRECATE|9|ST 18.900 MPa.
 
 Headroom was recomputed independently as `max(0.9 * z * 15000 - rho g z, 0)`
 and matched the production function exactly in 4 of 4 cases.
 
-Two caveats. The gradient is a **single depth-independent constant** -- real
-fracture gradients vary with lithology, and the ratio drifting from 1.50 to
-1.39 across the depth range is an artefact of the constant, not a modelled
-compaction trend. And unlike `storage_efficiency` and `porosity`, it carries
-**no citation**: a grep of `docs/` for "fracture" finds no literature entry for
-it. The value is defensible; its provenance is not documented to the standard
-the rest of the project sets.
+A single constant also cannot represent variation with lithology. By ingested
+lithology, the deepest units of SALUZZO|1, ASTI|1 and DESANA|1 are clastic or
+mixed ("CIOTTOLI E SABBIE"; "MARNE,SABBIE E GESSI"; "MARNE ARENACEE CON
+CONGLOMERATI E GESSI"). Those of MALOSSA|15 and TRECATE|9|ST are carbonates
+("CALCARI"; "CALCARI,MARNE E DOLOMIE"), outside the "clastic sequence" the code
+comment names.
 
-The same applies to `DEFAULT_SAFETY_FACTOR = 0.9`, documented only as "the
-fraction of the fracture pressure regulators typically allow" with no regulator
-named.
+**Provenance (evidence gap, confirmed).** Unlike `storage_efficiency` and
+`porosity`, the value carries no citation (pinned by
+`tests/test_provenance_audit.py`), and the tracked `docs/` contain no
+literature entry for it. No leak-off or fracture test exists for the screened
+wells: the SALUZZO|1 and ASTI|1 printouts record "LEAK OFF TEST: NESSUNO", and
+none was found in the DESANA|1 or MALOSSA|15 logs. The gradient's gauge/absolute
+convention is undocumented (Finding 4.1). *As originally written:* "The value
+is defensible". *Revised:* no repository evidence supports this as a general,
+population-wide claim; see the well-record evidence below.
+
+**Safety factor (separate item).** `DEFAULT_SAFETY_FACTOR = 0.9`
+(`pressure.py:18`) is commented only as the "Fraction of the fracture pressure
+regulators typically allow as a ceiling". No regulator, jurisdiction or
+document is named, so its basis is undocumented. It multiplies fracture
+pressure, not headroom: because headroom = `SF * P_frac - P_init`, a change in
+SF produces a larger-than-proportional change in headroom (below).
+
+Sensitivity: raising SF from 0.9 to 1.0 (+11.1%) raises headroom by +27.3% at
+the CLI defaults and by +48.3% for SALUZZO|1 at rho = 1060.
+
+#### Finding 4.5 revision -- well-record evidence and dependencies
+
+*Documentation revision. No equation, parameter, test or baseline changed. No
+fracture gradient, safety factor or pressure convention is adopted.*
+
+Mud densities are as printed in the operator composite logs (`data/PDF/`),
+read as g/l (kg/m3), the unit stated in the SALUZZO|1 and ASTI|1 printouts; the
+DESANA|1 and MALOSSA|15 lists do not repeat the unit. Static mud gradient =
+density x g, referenced to the rotary table. Circulating and surge pressures
+were not recorded, so the static figure is below what the hole saw while
+circulating.
+
+| Well | Mud density (g/l) | Static gradient | vs 15 000 Pa/m | Losses recorded |
+| --- | --- | --- | --- | --- |
+| SALUZZO\|1 | max 1400 (145-258 m); 1280-1320 to TD 1530.7 m | up to 13 729 Pa/m | 0.92x | none ("ASSORBIMENTI: NESSUNO") |
+| ASTI\|1 | max 1300 (616-821, 926-1135 m); 1280 to TD 1250 m | up to 12 749 Pa/m | 0.85x | none ("ASSORBIMENTI: NESSUNO") |
+| DESANA\|1 | 1520, from 2150 m to TD 3228.5 m | 14 906 Pa/m | 0.99x | none ("Assorbimenti: Nessuno") |
+| MALOSSA\|15 | 1800-2050 (4754-5421 m); 1910-1930 (5400-5500 m) | 17 652-20 104 Pa/m | up to 1.34x | 10 m3 (5227-5232 m) and 4 m3 (5269 m) at 2050; 49 m3 (5271-5290 m) at 2050; 9 m3 (5456-5500 m) at 1910-1930 |
+| TRECATE\|9\|ST | no record | - | - | - |
+
+Losses of 70 m3 (circulation) and 60 m3 (displacement) while running 13 3/8"
+casing, bottom hole at 2499 m; the 0-2500 m section was drilled at
+1100-1120 g/l. The loss location within the open hole is not stated.
+
+**What the drilling records support, and what they do not.**
+
+- SALUZZO|1, ASTI|1, DESANA|1: mud was carried without recorded losses. By the
+  usual drilling inference this gives a **no-loss lower bound**: the open hole
+  withstood at least that static mud gradient. It is **not a fracture-gradient
+  measurement**. All three lower bounds are at or below 15 000 Pa/m, so the
+  records do not contradict the default for these wells. DESANA|1's margin is
+  0.6%.
+- MALOSSA|15: the drilling record shows that the well sustained a static mud
+  gradient of approximately 20.1 kPa/m, with losses recorded in the heavy-mud
+  interval. These are **partial-loss observations**, not a direct
+  fracture-gradient measurement, and they do not establish the well's actual
+  fracture gradient. They do make the default 15 kPa/m unsuitable as an
+  unsupported well-specific assertion for MALOSSA|15. Losses were also recorded
+  at a bottom-hole depth of 2499 m while running casing, in a section drilled
+  with 1100-1120 g/l mud, so loss events alone do not locate a fracture
+  gradient.
+- TRECATE|9|ST: no drilling record in the project.
+- No screened well has a leak-off or fracture test, the only records that would
+  measure the gradient directly.
+
+**Dependencies (not resolved here).**
+
+- Finding 4.1: the gradient's gauge/absolute convention is undocumented, so the
+  headroom effect of `P_atm` stays conditional.
+- Finding 4.3: fracture pressure and headroom are evaluated at TD; no storage or
+  caprock interval is designated.
+- Finding 4.4: the along-hole-vs-vertical residual is negligible for the four
+  surveyed wells (about 3.1 kPa of headroom per metre of residual; about
+  7 kPa at MALOSSA|15).
+- Finding 5.2: the CLI default case uses a non-hydrostatic initial pressure, so
+  its ratio is 1.875 rather than the 1.39-1.50 of the synthetic table.
+
+**Not decided here:** the fracture-gradient value or model (constant, lithology-
+or depth-dependent), where the fracture criterion is evaluated, the safety
+factor's basis, and the severity.
 
 ### Finding 4.6 -- brine density is a fixed screening assumption, appropriately
 
@@ -1278,7 +1400,7 @@ undocumented (*Finding 4.1 revision*).
 | Linearity in depth and density | PASS | - | Ratios exact to 12 decimal places | None |
 | Fracture pressure independently defined | PASS | - | Own constant; never reads brine density | None |
 | Headroom formula | PASS | - | Matches independent recomputation 4/4 | None |
-| Fracture gradient magnitude | PASS WITH CAVEAT | LOW | 0.6631 psi/ft, 1.530 SG; but uncited and depth-independent | Documented |
+| Fracture-gradient default (15 000 Pa/m) | REVIEW REQUIRED | Under review | 0.6631 psi/ft, 1.530 SG (arithmetic); uncited; ratio to hydrostatic is depth-independent (G_f / rho g); not supported as a well-specific value for MALOSSA\|15 by its drilling record | Documented |
 | Brine density range | PASS | - | 10.00-10.79 kPa/m, between seawater and saline formation water | None |
 | **Pressure reference undeclared; gauge P fed to the EOS** | **REVIEW REQUIRED** | **MEDIUM** | `P(0) = 0` for hydrostatic and fracture pressure. EOS input: P50 +0.09% to +0.57% (5 screened wells), up to +2.53% density (44-well corpus); 4.15% in the synthetic 897 m case. Headroom +3.34% only if the gradient is absolute | Correction proposed, not applied |
 | **Hydraulic reference of z unstated** (original label "z not datum-corrected", superseded) | **REVIEW REQUIRED** | **HIGH** | Original: RT elevations 120.0 / 238.7 m, "P overstated 8.7-36.1%" on illustrative depths. Superseded: that is a sea-level water-level sensitivity, direction not established (*Finding 4.2 / 10.2 revision*) | Disclosure gap |
@@ -1356,9 +1478,11 @@ datum-error reading). That must not be rediscovered there as though it were new.
    (Finding 4.4). Operator Totco surveys quantify the along-hole-vs-vertical
    residual for SALUZZO|1, ASTI|1, DESANA|1 and MALOSSA|15 (capacity effect up
    to about 0.03%). TRECATE|9|ST has no survey, so its gap cannot be quantified.
-4. **The fracture gradient has no primary source.** 0.6631 psi/ft is defensible
-   against general practice, but "general practice" is not a citation, and
-   Phase 9 should decide whether it needs one.
+4. **The fracture gradient has no primary source.** 0.6631 psi/ft is an
+   arithmetic conversion; its fit to "general practice" is uncited engineering
+   judgment, and the MALOSSA|15 drilling record does not support it as a
+   well-specific value (*Finding 4.5 revision*). Phase 9 should decide whether
+   it needs a citation.
 5. **The normal-pressure assumption is untested.** No measured formation
    pressure exists anywhere in the dataset, so nothing in this repository can
    detect an over- or under-pressured reservoir. This is the largest uncertainty
