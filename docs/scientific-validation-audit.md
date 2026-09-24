@@ -108,6 +108,12 @@ The shift does lower the worst case (13.98% vs 16.67%, both near-critical) and
 does help below ~15 MPa, where most Italian pilot reservoirs sit. It is a
 defensible trade only if the intended pressure window is stated and enforced.
 
+*Revised (documentation only):* the phrase "where most Italian pilot reservoirs
+sit" is not supported by the Piemonte pilot population. Under the current
+pipeline pressure model, 14 of the 45 pilot wells with a depth are below 20 MPa,
+and 15 are above 35 MPa. See *Finding 11.1 revision* (Phase 11). The measured
+trade-off in this finding is unchanged.
+
 **The module docstring is factually wrong.** It claims the shift "brings the
 12-30 MPa / 320-355 K window to within a few percent". Measured in exactly that
 window the maximum error is **8.20%** (30 MPa / 320 K), and the shift makes
@@ -216,9 +222,15 @@ a corrected docstring, corrected test reference data, and new validation tests.
 
 1. **Pure CO2 only.** Real injection streams carry N2, O2, CH4, H2O. Impurities
    shift density by several percent; no mixing rule exists here. NOT VALIDATED.
-2. **No independent check of CoolProp itself.** Span & Wagner is treated as
-   ground truth. Its own stated uncertainty is ~0.03-0.05% in the regions used,
-   which is negligible against the 2-12% deviations measured.
+2. **No independent check of CoolProp itself.** Span & Wagner (1996), as
+   implemented in CoolProp, is used as the reference, not as a measurement. Its
+   published abstract states an estimated density uncertainty of ±0.03% to
+   ±0.05% only "in the technically most important region up to pressures of
+   30 MPa and up to temperatures of 523 K". Most of this phase's 1–35 MPa grid
+   lies in that region; the 30–35 MPa points do not, and the reference
+   uncertainty there was not verified from the accessible primary text. Within
+   the stated region the reference uncertainty is negligible against the 2-12%
+   deviations measured.
 3. **Grid resolution.** 140 points; a finer sweep could find a worse maximum
    than 13.98%.
 4. **Below 280 K untested.** The triple point (216.6 K) and the solid region are
@@ -3536,14 +3548,14 @@ volume translation, and the h-cancellation inside the Theis `u`.
 
 ### Finding 11.1 -- a third of the corpus sits outside the validated EOS envelope
 
-**REVIEW REQUIRED. Severity MEDIUM-HIGH. Anti-conservative. New.**
+**REVIEW REQUIRED. Severity MEDIUM-HIGH. Positive departure from the Span–Wagner reference above 35 MPa. New.**
 
 Agreement between two implementations of the same equation says nothing about
 whether that equation is right. The external check does.
 
 Against Span & Wagner (1996) via CoolProp 8.0.0, at each well's own state point:
 
-| Well | P (MPa) | PR + Peneloux | Span-Wagner | Error | Error untranslated |
+| Well | P (MPa) | PR + Peneloux | Span-Wagner | Departure from Span–Wagner | Departure, untranslated |
 | --- | --- | --- | --- | --- | --- |
 | SALUZZO\|1 | 15.88 | 762.135 | 757.939 | **+0.554%** | -4.575% |
 | DESANA\|1 | 33.52 | 738.264 | 712.265 | +3.650% | -1.479% |
@@ -3557,19 +3569,24 @@ outside that grid entirely.
 Extending the check to the whole corpus, over the 44 wells with both a depth and
 a temperature:
 
-| Population | Wells | Mean absolute error |
+| Population | Wells | Pooled mean absolute departure from Span–Wagner |
 | --- | --- | --- |
 | P <= 35 MPa (inside the Phase 1 envelope) | 29 | **2.63%** |
 | P > 35 MPa (outside it) | **15** | **7.29%** |
 | All | 44 | 4.22% |
 
+"Inside" here means P <= 35 MPa. For this 44-well corpus it is identical to the
+full 1–35 MPa / 280–400 K envelope, because no well exceeds 400 K without also
+exceeding 35 MPa. Shift on, ground-referenced pressure at rho = 1060 kg/m3.
+
 **15 of 44 wells -- 34% of the screenable corpus -- lie above the pressure range
-the EOS was validated over**, and in that region the error is 2.8x larger and
-systematically **positive**, meaning capacity is overstated.
+the EOS was validated over**, and in that region the departure from the reference
+is 2.8x larger and always **positive**. If the reference is accurate there,
+capacity is overstated.
 
 Worst cases across the corpus:
 
-| Well | P (MPa) | T (K) | PR | Span-Wagner | Error |
+| Well | P (MPa) | T (K) | PR | Span-Wagner | Departure from Span–Wagner |
 | --- | --- | --- | --- | --- | --- |
 | NOVI LIGURE\|2\|BIS DIR | 8.13 | 306.15 | 575.74 | 633.93 | **-9.18%** |
 | TRECATE\|4 | 65.20 | 421.15 | 844.27 | 775.94 | **+8.81%** |
@@ -3578,26 +3595,120 @@ Worst cases across the corpus:
 | SALI VERCELLESE\|1 | 60.28 | 421.15 | 811.06 | 752.08 | +7.84% |
 | CAVAGLIETTO\|1 | 9.33 | 312.15 | 543.24 | 588.75 | -7.73% |
 
-Two distinct failure regions, with opposite signs:
+Two distinct departure regions, with opposite signs:
 
 1. **High pressure (> 35 MPa, 15 wells).** The constant Peneloux shift
-   over-corrects. Errors of +7.8% to +8.8%, always positive. This is Phase 1
+   over-corrects. Departures of +4.9% to +8.8%, always positive. This is Phase 1
    Finding 1.1 -- previously demonstrated on a synthetic grid, now shown to
    affect a third of the actual dataset.
-2. **Near-critical (8-9 MPa, low temperature).** Errors of -7.7% to -9.2%,
+2. **Near-critical (8-9 MPa, low temperature).** Departures of -7.7% to -9.2%,
    always negative. This is Phase 1 Finding 1.3, and it too is populated:
    NOVI LIGURE|2|BIS DIR and CAVAGLIETTO|1 are real wells in this corpus.
 
 The untranslated columns make the trade-off concrete: at SALUZZO the shift turns
 a -4.58% error into +0.55%, but at MALOSSA it turns +1.67% into +7.42%. Phase 1
 concluded the shift is kept "because most Italian pilot reservoirs sit below
-20 MPa". **That premise is false for this corpus** -- 15 of 44 exceed 35 MPa, and
-the deepest exceed 65 MPa.
+20 MPa". **That premise is not supported by the pilot population** -- see the
+revision below.
 
 Nothing is changed. Restricting the shift to low pressure, or dropping it, are
 both scientific changes to a frozen module. But the justification recorded in
 `properties.py` should be revisited, because the population it appeals to is not
 the population in the data.
+
+#### Finding 11.1 revision -- premise, envelope coverage and shift behaviour
+
+*Documentation revision. Read-only re-analysis; no equation, parameter, test or
+baseline changed.*
+
+This finding merged three separate questions. They are separated here.
+
+**Method.** State points are the pipeline's own: pressure `P = rho*g*z` from the
+workbook depth. That is gauge pressure with zero at the depth reference. It is
+taken at rho = 1060 kg/m3 unless stated. Temperature is the pipeline's selected
+value per well. The reference density is Span & Wagner (1996) via CoolProp
+8.0.0: `PropsSI("D", "P", P, "T", T, "CO2")`, default HEOS backend, fluid EOS
+`Span-JPCRD-1996`. Pressure is passed in Pa and temperature in K. The departure
+is `(rho_PR - rho_SW) / rho_SW`. A positive value means Peng–Robinson is denser
+than the reference. "Shift off" is the production translated volume with the
+Peneloux constant `c` added back. All 264 bracket state points reproduce
+independently to within 1.1e-12 in the departure.
+
+These are **departures from a reference equation of state for pure CO2**. They
+are not measured density errors. Pressure, temperature and fluid composition at
+these wells are themselves unmeasured or modelled.
+
+**1. The Peneloux justification premise is not supported by the pilot
+population.**
+
+`properties.py` keeps the shift "because most Italian pilot reservoirs sit below
+20 MPa". The Piemonte pilot population has 46 records, 45 of them with a depth,
+spanning 782–6694 m.
+
+| Population | < 15 MPa | 15–20 | 20–35 | > 35 | Below 20 MPa |
+| --- | --- | --- | --- | --- | --- |
+| Pilot wells with a depth (45) | 6 | 8 | 16 | 15 | **14 / 45** |
+| Screening corpus, depth and temperature (44) | 6 | 7 | 16 | 15 | 13 / 44 |
+
+Across the scenario's brine-density range (1020–1100 kg/m3), the pilot count
+below 20 MPa is 13–18 of 45. The same holds for the ground/sea-level water-level
+brackets and the ±P_atm brackets, which are sensitivity cases only. The
+"20 MPa" figure matches only the upper bound of the placeholder pressure range in
+`examples/pilot-assumptions.json` (12–20 MPa). That file contains no wells.
+
+**2. The Phase 1 validation envelope does not cover the screening corpus.**
+
+Phase 1 validated the EOS over 1–35 MPa and 280–400 K. Of the 44 corpus wells:
+
+- **15 / 44 exceed 35 MPa.** This is the same 15 wells in every water-level and
+  ±P_atm bracket at rho = 1060, and 13–17 across the 1020–1100 kg/m3 range.
+- **13 / 44 exceed 400 K**, up to 455.15 K. Every one of these 13 also exceeds
+  35 MPa.
+- 2 wells exceed 35 MPa at or below 400 K: SOMMARIVA DEL BOSCO|1 and
+  ROMENTINO|1.
+- None is below 280 K.
+- Two of the out-of-envelope temperatures are non-stabilised readings
+  (VILLA FORTUNA|3, SALI VERCELLESE|1). The rest are extrapolated
+  (Fertl–Wichmann or Squarci–Taffi).
+
+The temperature exceedance is new here: the Phase 1 grid stops at 400 K.
+
+**3. Peneloux shift behaviour against the reference.**
+
+Pooled mean absolute departure, ground-referenced pressure at rho = 1060. The
+range in brackets is the signed departure.
+
+| Band | n | Shift on | Shift off |
+| --- | --- | --- | --- |
+| < 15 MPa | 6 | 4.05% (-9.18 to -0.76) | 7.77% |
+| 15–20 MPa | 7 | 1.99% | 3.37% |
+| 20–35 MPa | 16 | 2.38% | 2.71% |
+| > 35 MPa | 15 | 7.29% (+4.87 to +8.81) | 1.78% |
+| > 400 K | 13 | 7.65% | 1.98% |
+
+- Below 20 MPa the shift **reduces the mean departure** in every bracket tested.
+  Individual near-critical points still depart by up to -9.18%.
+- Above 35 MPa, and above 400 K, the shift produces **positive departures in
+  every bracket: +3.8% to +8.8%**. With the shift off, departures in that band
+  are -1.25% to +2.71%.
+- The sign and the band counts do not depend on the water-level or P_atm
+  convention.
+
+**Reference uncertainty.** Span & Wagner (1996, J. Phys. Chem. Ref. Data 25,
+1509) state a validity range from the triple point to 1100 K at pressures up to
+800 MPa. Every project state point (about 6–70 MPa, 306–455 K) lies within it.
+The published abstract gives an estimated density uncertainty of ±0.03% to
+±0.05% **only up to 30 MPa and 523 K**. For the project's state points above
+30 MPa, including all 15 above 35 MPa, the reference uncertainty **was not
+independently verified** from the accessible primary text. The same applies to
+the near-critical points (about 6–10 MPa, 306–312 K). The departures below
+30 MPa are therefore quantitatively supported. The positive departures above
+35 MPa are supported qualitatively: the reference is valid there, but its
+uncertainty is not quantified here.
+
+**Not decided here:** whether the Peneloux shift should be kept, restricted or
+replaced, and what operating envelope the tool should enforce. Both are owner
+decisions.
 
 ### Finding 11.2 -- the EOS bias and the hydraulic-reference sensitivity vary in opposite ways with depth
 
@@ -3644,7 +3755,7 @@ correction. It does not include Finding 3.1, which runs the other way at
 | Pore volume, mass, Mt | PASS | - | Worst relative difference 1.64e-16 | None |
 | Exponential integral | PASS | - | Own series/continued fraction matches scipy to 0.00e+00 | None |
 | Theis dP, fracture pressure, headroom, Qmax | PASS | - | Exact, all four | None |
-| **34% of the corpus is outside the validated EOS envelope** | **REVIEW REQUIRED** | **MEDIUM-HIGH** | 15/44 wells above 35 MPa; mean error 7.29% vs 2.63% | Documented |
+| **Screening corpus outside the Phase 1 EOS envelope** | **REVIEW REQUIRED** | **MEDIUM-HIGH** | 15/44 wells outside (all P > 35 MPa; 13 of them also T > 400 K). Pooled mean absolute departure from Span–Wagner, shift on, ground-referenced P at rho = 1060: 7.29% for these 15 vs 2.63% for the 29 wells inside (1–35 MPa, 280–400 K). Pilot premise: 14/45 below 20 MPa | Documented |
 | EOS bias plus hydraulic-reference sensitivity (original label "EOS and datum biases compound", superseded) | PASS WITH CAVEAT | LOW | ~+6% to +16% only if the water level is at sea level; 10.2 direction not established | Documented |
 
 ### Scientific numbers changed?
@@ -3667,22 +3778,26 @@ Phase 12 inherits:
 
 - **Finding 11.1**, which should be weighed against Phase 1's REVIEW REQUIRED on
   the Peneloux shift. Phase 1 left the shift in place on a premise about the
-  well population; Phase 11 measured that population and the premise does not
-  hold.
+  well population. The pilot population does not support that premise (14/45
+  below 20 MPa), and the corpus exceeds the validated envelope in both pressure
+  and temperature.
 - **Finding 11.2**, now a conditional sum that holds only if the water level is
   at sea level (see its revision note). What carries forward unconditionally is
-  Finding 11.1's EOS bias, which, with the Phase 7 Finding 7.2 point, lies
-  outside the reported uncertainty band.
+  Finding 11.1's departure from the Span–Wagner reference, which, with the
+  Phase 7 Finding 7.2 point, lies outside the reported uncertainty band.
 
 ### Remaining uncertainty
 
 1. **CoolProp is an implementation of Span & Wagner, not the correlation
-   itself.** It is the standard reference implementation and was cross-checked
-   in Phase 1 against published values, but it is still one route to the truth.
+   itself.** It is the standard reference implementation. It cites
+   `Span-JPCRD-1996` for CO2, and its implementation was not compared here
+   against the paper's own test values. The published density uncertainty
+   (±0.03–0.05%) covers only p <= 30 MPa and T <= 523 K. Above 30 MPa it was not
+   verified from the accessible primary text.
 2. **The corpus comparison uses a single brine density (1060 kg/m3)** to set
-   each well's pressure. The scenario's declared range is 1020-1100, which moves
-   each state point slightly; the 34%-above-35-MPa figure is not sensitive to
-   that, but individual per-well errors shift by a few tenths of a percent.
+   each well's pressure. Across the scenario's declared 1020–1100 range, the
+   number of wells above 35 MPa is 13–17 of 44 (15 at 1060). Individual
+   departures shift by a few tenths of a percent.
 3. **Temperature enters the comparison as the selected observation**, so any
    Phase 6 or Phase 10 temperature finding propagates into the Span-Wagner
    reference point as well as into the PR value. The *difference* between them
@@ -3993,8 +4108,11 @@ contains three of them.
    gauge/absolute status and fluid identified (*Finding 4.2 / 10.2 revision*,
    item 5). Only then consider a numerical change.
 4. **Revisit the Peneloux justification (Finding 11.1).** `properties.py` keeps
-   the shift because "most Italian pilot reservoirs sit below 20 MPa". Measured:
-   15 of 44 wells exceed 35 MPa and the deepest exceed 65 MPa.
+   the shift because "most Italian pilot reservoirs sit below 20 MPa"; only 14
+   of 45 pilot wells are. The screening corpus also exceeds the Phase 1
+   validation envelope: 15/44 wells are above 35 MPa and 13/44 above 400 K.
+   There the shift departs from Span–Wagner by +3.8% to +8.8%. The operating
+   envelope and the treatment of the shift are owner decisions.
 5. **Add `P_atm` (Finding 4.1).** One constant, one call site. Small, but the
    cited methodology (Donda: "pressure at surface of 15 degC and 1 atm") uses
    absolute pressure, so this is a divergence from the project's own source.
