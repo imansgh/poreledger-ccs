@@ -803,9 +803,13 @@ Linearity confirmed exactly in both variables: depth x2/x3/x10 gives pressure
 ratios 2.000000000000 / 3.000000000000 / 10.000000000000, and the same for
 density. **The arithmetic is correct.**
 
-### Finding 4.1 -- the model computes GAUGE pressure and both consumers need ABSOLUTE
+### Finding 4.1 -- Pressure reference undeclared; gauge pressure supplied to the EOS
 
-**REVIEW REQUIRED. Severity MEDIUM. Two opposing directions.**
+**REVIEW REQUIRED. Severity MEDIUM. EOS-input mismatch confirmed; headroom effect
+conditional.** *(Original title "the model computes GAUGE pressure and both
+consumers need ABSOLUTE" and original status "Two opposing directions", both
+superseded. The body below is the original Phase 4 reasoning; the current
+framing is* Finding 4.1 revision *at the end of this finding.)*
 
 A grep of `src/`, `docs/` and `frontend/` for "atmospher", "101325", "gauge",
 "absolute press", "psia" and "psig" returns **zero matches**. Atmospheric
@@ -816,18 +820,24 @@ The behaviour settles it: `hydrostatic_pressure_pa(0.0)` returns **0.0 Pa**, not
 `P = rho g z` is the weight of the fluid column alone. The physically complete
 form is `P_abs(z) = P_atm + rho g z`.
 
-Both consumers require absolute pressure:
+Both consumers were said to require absolute pressure (point 2 is conditional;
+see revision):
 
 1. **Peng-Robinson (`properties.py`)** takes thermodynamic pressure, which is
    absolute by definition. There is no reading of the EOS under which a gauge
    pressure is correct.
-2. **The fracture comparison.** A fracture gradient of 15 000 Pa/m applied from
-   surface yields an absolute fracture pressure; subtracting a gauge initial
-   pressure from it overstates the headroom by exactly `P_atm`.
+2. **The fracture comparison.** *(Conditional; see revision.)* As originally
+   written: "A fracture gradient of 15 000 Pa/m applied from surface yields an
+   absolute fracture pressure; subtracting a gauge initial pressure from it
+   overstates the headroom by exactly `P_atm`." In the code,
+   `fracture_pressure_pa(0) = 0`, the same zero as the hydrostatic pressure.
+   The gradient's gauge/absolute convention is undocumented, so this holds only
+   if the gradient is absolute.
 
-Measured effect of supplying gauge where absolute is required:
+Effect of adding `P_atm`, synthetic Phase 4 cases (T = 288.15 + 0.030 z; not
+corpus wells):
 
-| Case | z (m) | P_atm as % of P | CO2 density bias | Headroom overstated |
+| Case | z (m) | P_atm as % of P | CO2 density bias | Headroom overstated, *if the fracture gradient is absolute* |
 | --- | --- | --- | --- | --- |
 | Shallow pilot | 897 | 1.129% | **-4.146%** | 3.338% |
 | SALUZZO-like | 1527.5 | 0.644% | -0.602% | 2.115% |
@@ -839,9 +849,10 @@ well because 897 m / 315 K sits near the steep part of the CO2 isotherm, where
 a small pressure change moves density a lot. This is the same near-critical
 sensitivity documented in Phase 1, Finding 1.3.
 
-Note the two effects run **in opposite directions** and therefore do not
-cancel: capacity is understated by up to 4.1%, while injection headroom is
-overstated by up to 3.3%.
+As originally written, the two effects were said to "run in opposite
+directions", with capacity understated by up to 4.1% and headroom overstated by
+up to 3.3%. Both figures come from the synthetic 897 m / 315 K case. The
+capacity direction holds; the headroom figure is conditional (see revision).
 
 **Smallest possible correction**, offered but *not applied*: add `P_atm` once,
 at the single point where hydrostatic pressure is produced --
@@ -854,6 +865,53 @@ with `P_ATM = 101_325.0` Pa. One constant, one call site, no refactor. It is not
 applied here because it changes every capacity and every headroom number, and
 the standing instruction for this audit is that scientific numbers do not change
 without the project owner's decision.
+
+*Caveat:* this one-line form adds `P_atm` to the hydrostatic pressure only. In
+the current code it would also lower the CLI headroom by `P_atm`, which is
+correct only if the fracture gradient is absolute.
+
+#### Finding 4.1 revision -- pressure reference, EOS input and headroom
+
+*Documentation revision. No equation, parameter, test or baseline changed. The
+correction is not applied.*
+
+**1. Pressure reference.** Hydrostatic pressure (`scenario.py:130`,
+`gradient × z`) and fracture pressure (`pressure.py:97`, `depth × 15 000 Pa/m`)
+both start at zero at the depth reference surface. No `P_atm` term exists
+anywhere in `src/`. The model's pressure convention is undeclared. This is an
+undeclared convention, not an arithmetic error: the arithmetic reproduces
+exactly (Phase 11).
+
+**2. EOS input: confirmed mismatch.** Peng–Robinson (`properties.py`) is
+formulated in absolute thermodynamic pressure. The model passes it the
+gauge-by-construction value. Adding `P_atm` to the input pressure alone, with
+the model unchanged, gives:
+
+| Scope | Effect of adding `P_atm` |
+| --- | --- |
+| Five screened wells (literature scenario, area 8e7 m2, thickness 35 m, 2000 samples, seed 42) | P50 capacity +0.09% (TRECATE\|9\|ST) to +0.57% (ASTI\|1) |
+| 44-well corpus, point density at rho = 1060 | +0.08% to **+2.53%** (NOVI LIGURE\|2\|BIS DIR, 8.13 MPa / 306 K; near-critical); median +0.19% |
+| Synthetic Phase 4 case, 897 m / 315 K | density +4.3% (table above: gauge value 4.146% below the `P_atm`-added value) |
+
+The cited regional methodology also uses 1 atm at the surface (Finding 9.7).
+
+**3. Headroom: conditional, not a confirmed defect.** The 15 000 Pa/m
+(0.6631 psi/ft) gradient has no documented source and no stated gauge/absolute
+convention. It was added in commit c389cd1 with the comment "Typical fracture
+gradient for a normally-pressured clastic sequence"; see also Finding 4.5.
+
+- If the gradient is **absolute**, adding `P_atm` to the initial pressure alone
+  lowers headroom by `P_atm`. That is +0.56% to +3.34% relative to the
+  corrected value in the synthetic cases, and about 0.9% at the CLI defaults.
+- If the gradient is **gauge**, fracture and initial pressure already share a
+  zero and there is no headroom mismatch. Adding `P_atm` to both leaves
+  headroom unchanged, or changes it by `(1 − SF) × P_atm` if the safety factor
+  is also applied to `P_atm`.
+- Headroom is computed in the CLI only; the API does not compute it.
+
+**Not decided here:** the model's declared pressure convention, whether and
+where to add `P_atm`, and the fracture gradient's convention. Resolving the
+headroom question needs a source for the gradient, or a declared assumption.
 
 ### Finding 4.2 -- z is not datum-corrected, and the correction layer is bypassed
 
@@ -1068,19 +1126,20 @@ condition no code path currently produces.
 
 | Consumer | Quantity | Convention needed | Convention supplied | Compatible? |
 | --- | --- | --- | --- | --- |
-| Screening scenario | `pressure_pa` (low, high) | declared | gauge, undeclared | Under-specified |
+| Screening scenario | `pressure_pa` (low, high) | declared | gauge by construction, undeclared | Under-specified |
 | Capacity | none directly | - | - | Not applicable |
 | CO2 density (Peng-Robinson) | absolute thermodynamic P | **absolute** | gauge | **No** (Finding 4.1) |
 | Theis `delta_p` | pressure *difference* | either | either | **Yes** -- see below |
-| Fracture comparison | absolute vs absolute | **absolute** | absolute frac, gauge init | **No** (Finding 4.1) |
+| Fracture comparison | `P_frac` vs `P_init` | same reference for both | both zero at the depth reference; gradient convention undocumented | **Conditional** (Finding 4.1 revision) |
 | Frontend display | Pa -> MPa | none | none | Yes |
 
 The Theis row is the important exemption. `theis_injection_delta_p_pa` returns a
 pressure *rise*, and a difference is invariant under a constant offset: adding
 `P_atm` to both endpoints leaves it unchanged. The Theis mathematics is
-therefore entirely immune to Finding 4.1. What is *not* immune is
-`max_injection_rate_m3_s`, because its `allowable_delta_p_pa` argument is built
-by subtracting a gauge pressure from an absolute one.
+therefore entirely immune to Finding 4.1. `max_injection_rate_m3_s` is affected
+only if the fracture gradient is absolute. Its `allowable_delta_p_pa` subtracts
+two pressures that share a zero in the code, and the gradient's convention is
+undocumented (*Finding 4.1 revision*).
 
 ### Findings table
 
@@ -1092,7 +1151,7 @@ by subtracting a gauge pressure from an absolute one.
 | Headroom formula | PASS | - | Matches independent recomputation 4/4 | None |
 | Fracture gradient magnitude | PASS WITH CAVEAT | LOW | 0.6631 psi/ft, 1.530 SG; but uncited and depth-independent | Documented |
 | Brine density range | PASS | - | 10.00-10.79 kPa/m, between seawater and saline formation water | None |
-| **Gauge P fed to absolute-P consumers** | **REVIEW REQUIRED** | **MEDIUM** | `P(0) = 0`; density -4.15%, headroom +3.34% | Correction proposed, not applied |
+| **Pressure reference undeclared; gauge P fed to the EOS** | **REVIEW REQUIRED** | **MEDIUM** | `P(0) = 0` for hydrostatic and fracture pressure. EOS input: P50 +0.09% to +0.57% (5 screened wells), up to +2.53% density (44-well corpus); 4.15% in the synthetic 897 m case. Headroom +3.34% only if the gradient is absolute | Correction proposed, not applied |
 | **Hydraulic reference of z unstated** (original label "z not datum-corrected", superseded) | **REVIEW REQUIRED** | **HIGH** | Original: RT elevations 120.0 / 238.7 m, "P overstated 8.7-36.1%" on illustrative depths. Superseded: that is a sea-level water-level sensitivity, direction not established (*Finding 4.2 / 10.2 revision*) | Disclosure gap |
 | **z is total depth, not reservoir depth** | **REVIEW REQUIRED** | **MEDIUM** | `depth_m` = "total depth"; no reservoir datum exists | Documented |
 | z is MD, not TVD | PASS WITH CAVEAT | LOW-MED | "metres along-hole"; no deviation survey in any source | Documented |
@@ -1115,7 +1174,8 @@ pressure at "overstated by roughly 8-36% (4.2, dominant)". That figure rested on
 the datum-error reading of Finding 4.2, which is superseded (*Finding 4.2 / 10.2
 revision*, Phase 10). What remains of 4.2 is a hydraulic-reference sensitivity:
 where the water level is assumed to stand. Its direction is not established.
-Finding 4.1 is a **0.1-1.1%** understatement from the missing atmosphere, and
+Finding 4.1 is a **0.1-1.1%** pressure understatement from the missing
+atmosphere in the synthetic Phase 4 cases, and
 Finding 4.3 an unquantified overstatement.
 
 Affected downstream quantities:
@@ -1125,7 +1185,8 @@ Affected downstream quantities:
 - **Injectivity ceiling** (Phase 5) inherits them through
   `allowable_delta_p_pa`. For 4.2 the direction depends on the unresolved water
   level, and a change applied to reservoir pressure alone would move only one
-  side of the headroom comparison. Anti-conservative for 4.1.
+  side of the headroom comparison. For 4.1 the effect is conditional on the
+  fracture gradient's convention.
 - **Monte Carlo** (Phase 7) samples a pressure *range* built from this model, so
   the uncertainty band is centred on a value computed under an unstated
   water-level assumption. Widening the brine-density range does not represent
@@ -1484,9 +1545,10 @@ ceiling and severe for nothing else.
 
 The inherited Phase 4 caveat is confirmed and now bounded. `theis_injection_delta_p_pa`
 takes no absolute pressure argument, so Finding 4.1 provably cannot reach the
-Theis mathematics. It reaches the **rate ceiling** only through
-`allowable_delta_p_pa`, and there its effect (about 2% on headroom) is small
-next to the 5.5x from Findings 5.1 and 5.2.
+Theis mathematics. It can reach the **rate ceiling** only through
+`allowable_delta_p_pa`, and only if the fracture gradient is absolute. There its
+effect is about 0.9% on headroom at the CLI defaults (0.56-3.34% across the
+synthetic Phase 4 cases), small next to the 5.5x from Findings 5.1 and 5.2.
 
 Phase 12 inherits two genuine cross-model inconsistencies: closed trap versus
 infinite aquifer, and the unchecked duplicate thickness/porosity pairs.
@@ -1509,7 +1571,8 @@ infinite aquifer, and the unchecked duplicate thickness/porosity pairs.
 5. **The fracture criterion itself carries Phase 4's uncertainties** -- an
    uncited gradient, an unstated hydraulic (water-level) reference (originally
    described as "an uncorrected depth datum", superseded -- see *Finding 4.2 /
-   10.2 revision*), and a gauge/absolute mismatch.
+   10.2 revision*), and an undeclared pressure reference whose headroom effect
+   is conditional on the gradient's convention (*Finding 4.1 revision*).
 
 ---
 
@@ -1938,7 +2001,7 @@ net-effect assessment:
 | --- | --- | --- | --- |
 | 3.1 -- E applied to net thickness | MEDIUM | Reconcile E with its gross-thickness definition | Understates capacity 1.4-10x |
 | 3.2 -- porosity not qualified | LOW | Confirm total vs effective (Phase 9) | None, if confirmed total |
-| 4.1 -- gauge fed to absolute consumers | MEDIUM | Add `P_atm` at one call site | Understates capacity <=4.1%; overstates headroom <=3.3% |
+| 4.1 -- pressure reference undeclared; gauge fed to the EOS | MEDIUM | Declare the convention; add `P_atm` (not applied) | EOS input: understates capacity 0.09-0.57% (5 screened wells), up to 2.53% (corpus), 4.1% (synthetic 897 m case). Headroom: conditional on the gradient's convention |
 | 4.2 -- hydraulic reference (water level) of z unstated | HIGH | Establish the water level per well; depth datum documented for 4 wells, unknown for TRECATE\|9\|ST | Direction not established; sensitivity only (original entry "Overstates capacity 8-36%", superseded) |
 | 4.3 -- z is total depth | MEDIUM | Needs a reservoir reference depth that does not exist | Overstates capacity |
 | 5.1 -- far-field dP vs near-well limit | HIGH | Evaluate fracture check at wellbore radius | Overstates rate ceiling 3.2x |
@@ -2130,7 +2193,7 @@ band, because none of them is represented as a sampled quantity:
 | 6.6 -- uncorrected BHT | overstates up to 18.6% | **no** |
 | 6.3 -- temperature method rank | 3.8% at TRECATE | **no** |
 | 3.1 -- E applied to net thickness | understates 1.4-10x | **no** |
-| 4.1 -- gauge vs absolute pressure | understates up to 4.1% | **no** |
+| 4.1 -- gauge vs absolute pressure (EOS input) | understates 0.09-0.57% (5 screened wells); up to 2.53% (corpus); 4.1% (synthetic 897 m case) | **no** |
 | 4.3 -- `z` is total depth | overstates, unquantified | **no** |
 
 Sampling more realisations reduces the width of the band around a number that
@@ -3995,7 +4058,7 @@ provably may not.
 | --- | --- | --- |
 | temperature -> density | **consistent** | One consumer, one conversion, verified exactly in Phase 11 |
 | density -> capacity | **consistent** | Linear, elasticity +1, reproduced to 1.6e-16 |
-| pressure -> injectivity | **inconsistent** | Finding 12.1; plus gauge/absolute (4.1) reaching the fracture comparison |
+| pressure -> injectivity | **inconsistent** | Finding 12.1; plus a pressure-reference question (4.1) that reaches the fracture comparison only if the gradient is absolute |
 | thickness across models | **unchecked** | Finding 12.2 |
 | T and P depths | consistent enough | Finding 12.3, < 1.6% |
 | uncertainty propagation | **inconsistent** | Finding 12.5: bias exceeds band |
@@ -4113,9 +4176,11 @@ contains three of them.
    validation envelope: 15/44 wells are above 35 MPa and 13/44 above 400 K.
    There the shift departs from Span–Wagner by +3.8% to +8.8%. The operating
    envelope and the treatment of the shift are owner decisions.
-5. **Add `P_atm` (Finding 4.1).** One constant, one call site. Small, but the
-   cited methodology (Donda: "pressure at surface of 15 degC and 1 atm") uses
-   absolute pressure, so this is a divergence from the project's own source.
+5. **Declare the pressure convention (Finding 4.1).** The EOS takes absolute
+   pressure and the cited methodology uses 1 atm at the surface; the model
+   passes gauge. Adding `P_atm` to the hydrostatic pressure is one constant at
+   one call site, but it also moves CLI headroom unless the fracture gradient's
+   convention is settled. Owner decision.
 
 Findings 5.1, 5.2 and 12.1 are severe but CLI-only, and should be fixed together
 since all three concern the same composition.
