@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, StrictInt
+from pydantic import BaseModel, ConfigDict, Field, StrictInt, model_validator
 
 from ccs_screen.api import (
     DEFAULT_SAMPLES,
@@ -30,6 +30,35 @@ _STRICT = ConfigDict(extra="forbid")
 
 
 # -- requests ----------------------------------------------------------------
+
+
+class NetToGrossModel(BaseModel):
+    """Optional declaration of the net-to-gross that thickness_m implies.
+
+    Recorded for provenance only; never used in a calculation. ``gt=0, le=1``
+    also rejects NaN and both infinities.
+    """
+
+    model_config = _STRICT
+
+    low: float = Field(..., gt=0, le=1, json_schema_extra={"example": 0.30})
+    high: float = Field(..., gt=0, le=1, json_schema_extra={"example": 0.55})
+    net_criterion: Literal[
+        "porosity_permeability", "porosity_only", "permeability_only",
+        "lithology_net_sand", "flow_unit", "unspecified",
+    ] = Field(..., description="What test defined 'net'.")
+    net_basis: Literal[
+        "log_derived", "core_derived", "model_derived",
+        "analogue", "assumed", "unknown",
+    ] = Field(..., description="How the ratio was obtained.")
+    cutoff_note: str | None = Field(default=None, max_length=500)
+    thickness_convention: Literal["measured", "tvd", "tst"] | None = None
+
+    @model_validator(mode="after")
+    def _ordered(self) -> "NetToGrossModel":
+        if self.low > self.high:
+            raise ValueError(f"low must be <= high, got ({self.low}, {self.high})")
+        return self
 
 
 class UserInputsModel(BaseModel):
@@ -54,6 +83,11 @@ class UserInputsModel(BaseModel):
         description=("Net storage thickness in m -- not the gross "
                      "chronostratigraphic interval."),
         json_schema_extra={"example": 35.0},
+    )
+    net_to_gross: NetToGrossModel | None = Field(
+        default=None,
+        description=("Optional: the net-to-gross that thickness_m implies. "
+                     "Recorded for provenance; not used in any calculation."),
     )
 
 
@@ -129,12 +163,21 @@ class WellSummary(BaseModel):
 
 
 class CapacityModel(BaseModel):
-    p10: float
-    p50: float
-    p90: float
+    """P10/P50/P90 in the statistical convention: low / median / high case.
+
+    The two disclosure blocks are open mappings so FastAPI cannot filter them.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    p10: float = Field(..., description="Low case: 10th percentile, Mt CO2.")
+    p50: float = Field(..., description="Median case: 50th percentile, Mt CO2.")
+    p90: float = Field(..., description="High case: 90th percentile, Mt CO2.")
     mean: float
     n_samples: int
     deterministic: bool
+    percentile_convention: dict[str, Any] | None = None
+    uncertainty_band: dict[str, Any] | None = None
 
 
 class ScreenResponse(BaseModel):
@@ -162,6 +205,7 @@ class ScreenResponse(BaseModel):
     screening_inputs: dict[str, Any] = Field(default_factory=dict)
     label_legend: dict[str, str] = Field(default_factory=dict)
     user_inputs: dict[str, Any] = Field(default_factory=dict)
+    thickness_provenance: dict[str, Any] | None = None
     temperature: dict[str, Any] | None = None
     conflicts: list[str] = Field(default_factory=list)
     depth_m: float | None = None
@@ -187,6 +231,8 @@ class TemperatureResponse(BaseModel):
     note: str | None = None
     scenario: dict[str, Any] | None = None
     user_inputs: dict[str, Any] | None = None
+    thickness_provenance: dict[str, Any] | None = None
+    percentile_convention: dict[str, Any] | None = None
     reason: str | None = None
     error: str | None = None
 

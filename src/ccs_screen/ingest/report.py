@@ -185,7 +185,9 @@ class WellScreeningReport:
         if self.result:
             r = self.result
             lines.append(f"      P10 / P50 / P90      : {r.p10_mt:.1f} / {r.p50_mt:.1f} / "
-                         f"{r.p90_mt:.1f} Mt")
+                         f"{r.p90_mt:.1f} Mt  (low / median / high case)")
+            lines.append("      P10-P90 band         : sampled uncertainty only; excludes "
+                         "systematic/model bias")
             lines.append(f"      mean                 : {r.mean_mt:.1f} Mt")
             if r.deterministic:
                 lines.append("      NOTE                 : every prior is a point value, "

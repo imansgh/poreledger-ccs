@@ -326,8 +326,12 @@ def test_interpretation_warnings_do_not_leak_between_calls(data_dir):
     first = screen(data_dir)
     second = api.screen_well("SALUZZO|1", VALID, scenario="sensitivity",
                              data_dir=data_dir, samples=50)
-    assert len(first["interpretation"]["warnings"]) == 1
-    assert second["interpretation"]["warnings"] == []
+    # Per-request disclosures (net-to-gross, uncertainty band) attach to both;
+    # the scenario-specific scale warning must attach to the first only.
+    per_request = ["net_to_gross_not_declared",
+                   "sampled_uncertainty_band_excludes_systematic_bias"]
+    assert list(warnings_of(first)) == ["scale_mismatch_basin_vs_closure", *per_request]
+    assert list(warnings_of(second)) == per_request
     assert api.INTERPRETATION["warnings"] == []
 
 
