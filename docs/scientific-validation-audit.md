@@ -1066,23 +1066,104 @@ datum, MD or TVD per Finding 4.4) and the temperature at that interval, plus an
 owner decision on the state-point convention. Finding 4.2's hydraulic reference
 also shifts the pressure at any chosen depth.
 
-### Finding 4.4 -- depth is measured depth, not true vertical depth
+### Finding 4.4 -- Along-hole vs vertical depth: residual quantified for four wells, unresolved for TRECATE|9|ST
 
-**PASS WITH CAVEAT. Severity LOW to MEDIUM.**
+**PASS WITH CAVEAT. Severity LOW for SALUZZO|1, ASTI|1, DESANA|1 and MALOSSA|15
+(residual quantified from operator surveys); unresolved for TRECATE|9|ST
+(evidence gap).** *(Original title "depth is measured depth, not true vertical
+depth" and original severity "LOW to MEDIUM", both superseded. The current
+framing is* Finding 4.4 revision *at the end of this finding.)*
 
-`StratigraphicInterval` is documented as *"one chronostratigraphic unit as
-logged, in metres along-hole"*, so depths are **MD**. `units.py` recognises a
-`v.` annotation in strings such as `5500 v.5497~`, which is a true-vertical
-note, but it is treated as an approximation marker and no TVD field is stored.
+*As originally written:* "`StratigraphicInterval` is documented as 'one
+chronostratigraphic unit as logged, in metres along-hole', so depths are MD.
+`units.py` recognises a `v.` annotation in strings such as `5500 v.5497~` ...
+no TVD field is stored." *Corrected:* the "along-hole" docstring
+(`records.py:100`) belongs to `StratigraphicInterval`, which feeds gross
+thickness, not `depth_m`, so it says nothing about the pressure depth.
+`units.py:32-33` does not recognise `v.`: its approximation pattern matches only
+`~`, `≈`, `ca.` and `circa`, although the comment above it mentions "true
+vertical". No structured source carries a TVD, inclination or azimuth column,
+and no TVD field is stored.
 
 `P = rho g z` requires **TVD**: the hydrostatic column is vertical. For a
 vertical well MD = TVD and nothing is wrong. For a deviated well MD > TVD and
 the pressure is overstated.
 
-No deviation survey exists in any source in this repository, so the size of the
-effect is unknown and unbounded from the available data. The pilot wells are
-1950s-1980s onshore exploration wells, which were predominantly vertical, so
-the effect is most likely small -- but "most likely" is not a measurement.
+*As originally written:* "No deviation survey exists in any source in this
+repository, so the size of the effect is unknown and unbounded from the
+available data. ... 'most likely' is not a measurement." *Superseded:* the
+operator composite logs in `data/PDF/` contain inclination-only (Totco) surveys
+for four of the five screened wells, so the effect is quantified for those wells
+(see revision). TRECATE|9|ST has none.
+
+#### Finding 4.4 revision -- depth reference, residual vertical-depth gap and evidence gap
+
+*Documentation revision. No equation, parameter, test or baseline changed. No
+depth conversion is applied, and no state-point convention is adopted
+(Finding 4.3 is separate).*
+
+**1. What `depth_m` is.** It is ingested unchanged from GEOTHOPICA
+`profondità` (`normalize.py:153-162`); no depth-reference correction exists in
+the code, and it flows unchanged into hydrostatic pressure
+(`scenario.py:333-334`) and the fracture/headroom check
+(`completeness.py:171-172`). For SALUZZO|1, ASTI|1, DESANA|1 and MALOSSA|15 the
+audit demonstrates by arithmetic identity that the stored value equals the
+operator's rotary-table (RT) total depth minus the RT-to-ground height
+(*Finding 4.2 / 10.2 revision*, section 1). This is inferred from source values;
+no GEOTHOPICA document states it. Because the rig floor sits vertically above
+the wellhead, the stored value is consistent with **along-hole depth measured
+from ground level**. It is therefore neither raw RT-referenced MD nor vertical
+depth.
+
+**2. Residual vertical-depth gap.** On a common ground datum,
+`depth_m − TVD_ground = (MD_RT − h_RT) − (TVD_RT − h_RT) = MD_RT − TVD_RT`: the
+RT height cancels, so the residual is purely along-hole vs vertical. It is never
+negative, so the pipeline's pressure is equal to or slightly above the
+vertical-depth value on the same datum.
+
+| Well | Operator inclination survey (composite log) | Residual `depth_m` − vertical depth below ground |
+| --- | --- | --- |
+| SALUZZO\|1 | 16 Totco stations, 390–1498 m, 0.16–3.33° | 0.25–0.30 m |
+| ASTI\|1 | 6 stations, 417–1248 m, 0.08–0.33° | ≤0.01 m |
+| DESANA\|1 | 9 stations, 940–2846 m, 0°00'–0°55'; last 382 m unsurveyed | 0.04–0.10 m |
+| MALOSSA\|15 | 23 stations on the final hole path, 206–5366 m, up to 6°30' (first sidetrack) | 2.1–2.2 m computed; about 3 m from the operator's approximate "v.5497~" |
+| TRECATE\|9\|ST | none | not quantifiable |
+
+Residuals use the average-angle method between documented stations; each
+unsurveyed end segment extends the nearest station's inclination. Totco
+readings are inclination-only at sparse stations, and no azimuth is recorded.
+
+**Depth-alignment sensitivity** (not a model correction). Pipeline value
+relative to vertical depth below ground on the same datum; `P = rho*g*z` at
+rho = 1060 kg/m3, temperature unchanged:
+
+| Well | Density / capacity excess from using `depth_m` |
+| --- | --- |
+| SALUZZO\|1 | +0.008% to +0.010% |
+| ASTI\|1 | approximately 0% |
+| DESANA\|1 | +0.001% to +0.002% |
+| MALOSSA\|15 | +0.021% computed; approximately +0.029% using the operator's approximate `v.5497~` |
+| TRECATE\|9\|ST | not quantifiable |
+
+For the four surveyed wells the effect is confirmed in sign and is very small.
+
+**3. MALOSSA|15.** The computed vertical depth from the rotary table (about
+5497.8 m) agrees with the operator's approximate "5500 v.5497~". The pipeline
+uses 5491 (= 5500 − 9). `pozzi-storici.csv` and `po_wells_clean.csv` carry 5497.
+The 6 m difference that Finding 10.3 records as a source conflict is consistent
+with the 9 m RT height and the roughly 3 m along-hole-vs-vertical difference
+acting in opposite directions. This is an evidence-based interpretation, not a
+documented source convention.
+
+**4. TRECATE|9|ST.** Known: workbook `profondità` 6087 and `quota` 139; 6096 in
+the other two sources; a temperature observation at 6247.9 m, below the
+recorded total depth (Finding 10.1). Unknown: depth reference, RT height,
+whether the depth is along-hole or vertical, and deviation geometry. There is no
+composite log or survey in the project or on ViDEPI's public list. The "ST"
+suffix does not by itself establish a deviation geometry.
+
+**Not decided here:** whether to convert depths to vertical depth in the model,
+and the TRECATE|9|ST depth reference.
 
 ### Finding 4.5 -- the fracture gradient is physically sensible but uncited
 
@@ -1202,7 +1283,7 @@ undocumented (*Finding 4.1 revision*).
 | **Pressure reference undeclared; gauge P fed to the EOS** | **REVIEW REQUIRED** | **MEDIUM** | `P(0) = 0` for hydrostatic and fracture pressure. EOS input: P50 +0.09% to +0.57% (5 screened wells), up to +2.53% density (44-well corpus); 4.15% in the synthetic 897 m case. Headroom +3.34% only if the gradient is absolute | Correction proposed, not applied |
 | **Hydraulic reference of z unstated** (original label "z not datum-corrected", superseded) | **REVIEW REQUIRED** | **HIGH** | Original: RT elevations 120.0 / 238.7 m, "P overstated 8.7-36.1%" on illustrative depths. Superseded: that is a sea-level water-level sensitivity, direction not established (*Finding 4.2 / 10.2 revision*) | Disclosure gap |
 | **State-point depth is TD; no storage interval designated** | **REVIEW REQUIRED** | **MEDIUM** | `depth_m` = "total depth"; stratigraphic tops ingested but none designated as the storage interval; direction and magnitude not established | Documented |
-| z is MD, not TVD | PASS WITH CAVEAT | LOW-MED | "metres along-hole"; no deviation survey in any source | Documented |
+| Along-hole vs vertical depth of z | PASS WITH CAVEAT | LOW (4 surveyed wells); unresolved (TRECATE\|9\|ST) | depth_m consistent with along-hole depth from ground (inferred); operator Totco surveys quantify the residual for the four surveyed wells (up to about 3 m; capacity effect up to about 0.03%); TRECATE\|9\|ST has no survey | Documented |
 | Negative depth accepted | PASS WITH CAVEAT | LOW | Returns -1.03 MPa; `pressure.py` would reject | Documented |
 | Theis `delta_p` convention | PASS | - | A difference is offset-invariant | None |
 
@@ -1271,8 +1352,10 @@ datum-error reading). That must not be rediscovered there as though it were new.
    gap between total depth and storage-interval depth cannot be measured for any
    well in this dataset, and the sign of its effect on density also depends on
    how temperature is reassigned to that interval.
-3. **Well deviation is unknown** (Finding 4.4). The MD/TVD gap cannot be bounded
-   without deviation surveys, which no source provides.
+3. **Well deviation is quantified for four wells, not for TRECATE|9|ST**
+   (Finding 4.4). Operator Totco surveys quantify the along-hole-vs-vertical
+   residual for SALUZZO|1, ASTI|1, DESANA|1 and MALOSSA|15 (capacity effect up
+   to about 0.03%). TRECATE|9|ST has no survey, so its gap cannot be quantified.
 4. **The fracture gradient has no primary source.** 0.6631 psi/ft is defensible
    against general practice, but "general practice" is not a citation, and
    Phase 9 should decide whether it needs one.
