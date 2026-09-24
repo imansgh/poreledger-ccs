@@ -845,7 +845,11 @@ without the project owner's decision.
 
 ### Finding 4.2 -- z is not datum-corrected, and the correction layer is bypassed
 
-**REVIEW REQUIRED. Severity HIGH. Anti-conservative for capacity.**
+**REVIEW REQUIRED. Severity HIGH. Direction not established.** *(Original
+status "Anti-conservative for capacity", superseded 2026-09-24. The title and
+body below are the original Phase 4 reasoning; the current framing is the
+revision note at the end of this finding and* Finding 4.2 / 10.2 revision
+*in Phase 10.)*
 
 This is the largest effect found in Phase 4.
 
@@ -905,6 +909,22 @@ That is the gap, and it is a documentation gap rather than a code defect.
 It is: the dimension is metres and `P = rho g z` is dimensionally sound. The
 problem is not the unit of `z` but its **origin**.
 
+**Revised 2026-09-24 (documentation only).** This finding merged two separate
+questions. They are now separated in *Finding 4.2 / 10.2 revision* (Phase 10):
+
+- **Depth datum: supported for four wells.** The workbook depths for SALUZZO|1,
+  DESANA|1, ASTI|1 and MALOSSA|15 are already below-ground depths. No
+  rotary-table air gap remains in `z`.
+- **Hydraulic reference: unresolved.** Where the water level stands, and so where
+  the brine column begins, is not established by any evidence in the repository.
+
+The sentence *"The brine column starts at the water table, not at the rotary
+table"* is therefore not a description of the current code, which starts the
+column at the depth reference (ground level for those four wells). The magnitude
+tables, the "Direction of the error" paragraph and the statement that the datum
+is unknown are kept unchanged above as history. They are **not** measurements of
+a datum error, and the direction they state is not established.
+
 ### Finding 4.3 -- z is total well depth, not a reservoir reference depth
 
 **REVIEW REQUIRED. Severity MEDIUM. Anti-conservative.**
@@ -939,7 +959,7 @@ note, but it is treated as an approximation marker and no TVD field is stored.
 
 `P = rho g z` requires **TVD**: the hydrostatic column is vertical. For a
 vertical well MD = TVD and nothing is wrong. For a deviated well MD > TVD and
-the pressure is overstated, in the same direction as Finding 4.2.
+the pressure is overstated.
 
 No deviation survey exists in any source in this repository, so the size of the
 effect is unknown and unbounded from the available data. The pilot wells are
@@ -1061,7 +1081,7 @@ by subtracting a gauge pressure from an absolute one.
 | Fracture gradient magnitude | PASS WITH CAVEAT | LOW | 0.6631 psi/ft, 1.530 SG; but uncited and depth-independent | Documented |
 | Brine density range | PASS | - | 10.00-10.79 kPa/m, between seawater and saline formation water | None |
 | **Gauge P fed to absolute-P consumers** | **REVIEW REQUIRED** | **MEDIUM** | `P(0) = 0`; density -4.15%, headroom +3.34% | Correction proposed, not applied |
-| **z not datum-corrected** | **REVIEW REQUIRED** | **HIGH** | Documented RT elevations 120.0 / 238.7 m; P overstated 8.7-36.1% | Disclosure gap |
+| **Hydraulic reference of z unstated** (original label "z not datum-corrected", superseded) | **REVIEW REQUIRED** | **HIGH** | Original: RT elevations 120.0 / 238.7 m, "P overstated 8.7-36.1%" on illustrative depths. Superseded: that is a sea-level water-level sensitivity, direction not established (*Finding 4.2 / 10.2 revision*) | Disclosure gap |
 | **z is total depth, not reservoir depth** | **REVIEW REQUIRED** | **MEDIUM** | `depth_m` = "total depth"; no reservoir datum exists | Documented |
 | z is MD, not TVD | PASS WITH CAVEAT | LOW-MED | "metres along-hole"; no deviation survey in any source | Documented |
 | Negative depth accepted | PASS WITH CAVEAT | LOW | Returns -1.03 MPa; `pressure.py` would reject | Documented |
@@ -1076,22 +1096,28 @@ correction in Finding 4.1 is written out but deliberately not applied.
 
 Findings 4.1, 4.2 and 4.3 all act on the same quantity -- the pressure handed to
 the EOS and to the fracture comparison -- and all three act on `z` or its
-offset, so their effects **compound multiplicatively** rather than cancelling.
-Combined worst case on reservoir pressure, using the documented datum
-elevations: **overstated by roughly 8-36%** (4.2, dominant), partially offset by
-**0.1-1.1%** understatement from the missing atmosphere (4.1), with Finding 4.3
-adding an unquantified further overstatement.
+offset, so their effects combine multiplicatively.
+
+As originally written, this section put the combined worst case on reservoir
+pressure at "overstated by roughly 8-36% (4.2, dominant)". That figure rested on
+the datum-error reading of Finding 4.2, which is superseded (*Finding 4.2 / 10.2
+revision*, Phase 10). What remains of 4.2 is a hydraulic-reference sensitivity:
+where the water level is assumed to stand. Its direction is not established.
+Finding 4.1 is a **0.1-1.1%** understatement from the missing atmosphere, and
+Finding 4.3 an unquantified overstatement.
 
 Affected downstream quantities:
 
-- **Capacity** (Phase 3) inherits this through CO2 density. Direction:
-  anti-conservative, opposite to Finding 3.1.
-- **Injectivity ceiling** (Phase 5) inherits it through `allowable_delta_p_pa`.
-  Direction: conservative for 4.2 (a higher initial pressure leaves less
-  headroom), anti-conservative for 4.1.
+- **Capacity** (Phase 3) inherits these through CO2 density. Direction: not
+  established for 4.2; understated by 4.1; overstated by 4.3.
+- **Injectivity ceiling** (Phase 5) inherits them through
+  `allowable_delta_p_pa`. For 4.2 the direction depends on the unresolved water
+  level, and a change applied to reservoir pressure alone would move only one
+  side of the headroom comparison. Anti-conservative for 4.1.
 - **Monte Carlo** (Phase 7) samples a pressure *range* built from this model, so
-  the uncertainty band is centred on a biased value. Widening the brine-density
-  range does not cover a datum error.
+  the uncertainty band is centred on a value computed under an unstated
+  water-level assumption. Widening the brine-density range does not represent
+  that assumption.
 
 ### Is Phase 5 unblocked?
 
@@ -1108,15 +1134,18 @@ declared, and the distinction is deliberate:
   and treat its numeric ceilings as provisional.
 
 Phase 10 and Phase 11 are where this matters most: every real-well pressure,
-density and capacity number they produce carries Finding 4.2 at 8-36%. That
-must not be rediscovered there as though it were new.
+density and capacity number they produce rests on the unstated water-level
+assumption behind Finding 4.2 (originally sized at 8-36% under the superseded
+datum-error reading). That must not be rediscovered there as though it were new.
 
 ### Remaining uncertainty
 
-1. **Finding 4.2 cannot be quantified per well.** The 8.7% and 36.1% figures use
-   the two rotary-table elevations that happen to be stated in the source
-   documents. For wells whose datum is unknown *and* whose elevation is
-   unrecorded, the error is unbounded from the available data.
+1. **Finding 4.2's hydraulic reference is unresolved.** *(Original item: "cannot
+   be quantified per well ... the error is unbounded", superseded 2026-09-24.)*
+   The depth datum is now documented for four wells and unknown for
+   TRECATE|9|ST. What remains is where the water level stands, which no
+   measurement in the repository establishes. The size and the sign of the
+   effect both depend on that assumption.
 2. **Finding 4.3 is unquantified.** Without a reservoir top depth, the gap
    between total depth and storage-interval depth cannot be measured for any
    well in this dataset.
@@ -1466,7 +1495,9 @@ infinite aquifer, and the unchecked duplicate thickness/porosity pairs.
 4. **Skin and completion are unknown.** No completion data exists in any source,
    so wellbore effects cannot be estimated.
 5. **The fracture criterion itself carries Phase 4's uncertainties** -- an
-   uncited gradient, an uncorrected depth datum, and a gauge/absolute mismatch.
+   uncited gradient, an unstated hydraulic (water-level) reference (originally
+   described as "an uncorrected depth datum", superseded -- see *Finding 4.2 /
+   10.2 revision*), and a gauge/absolute mismatch.
 
 ---
 
@@ -1687,8 +1718,10 @@ screening.)
 
 The ranking does mitigate this: an extrapolated method is always preferred over
 `non_stabilized`. The residual exposure is a well where **only** a non-stabilised
-reading exists near TD, which is then used uncorrected. Direction is the same as
-Phase 4 Finding 4.2 -- both overstate capacity, so they **compound**.
+reading exists near TD, which is then used uncorrected. That overstates
+capacity. *(The original text paired this with Phase 4 Finding 4.2 as a
+same-direction effect. The direction of Finding 4.2's hydraulic-reference effect
+is not established -- see* Finding 4.2 / 10.2 revision*.)*
 
 ### Finding 6.7 -- the classifier is conservative and does not guess
 
@@ -1777,8 +1810,9 @@ findings translate directly:
   difference between the two extrapolated methods.
 - Finding 6.6 (no correction of an unstabilised reading) is worth up to
   **18.60%** where no extrapolated value exists.
-- Findings 6.6 and Phase 4 Finding 4.2 both **overstate** capacity, so they
-  compound rather than offset. Phase 3 Finding 3.1 runs the other way.
+- Finding 6.6 **overstates** capacity; Phase 3 Finding 3.1 runs the other way.
+  The direction of Phase 4 Finding 4.2's hydraulic-reference effect is not
+  established, so it is not paired with either.
 
 Nothing here blocks Phase 7. Monte Carlo samples temperature as a prior range,
 and the question of whether that range is sampled and propagated correctly is
@@ -1842,6 +1876,11 @@ This was the highest-value change available, because Finding 4.2 is the only
 HIGH-severity item that reaches the public API and its sole defect was that the
 limitation was invisible to a caller.
 
+*Note 2026-09-24:* the rationale text above is recorded as it was written and
+still stands in the code. Its sub-sea framing and stated direction ("overstates
+the brine column") are superseded by *Finding 4.2 / 10.2 revision*. Changing the
+code string is a separate disclosure follow-up.
+
 **Finding 6.4 -- the temperature conflict note no longer calls a depth spread a
 method disagreement.** `normalize.py`, inside the `note=` string of the
 `temperature_k` `Conflict`. It previously read "methods disagree by {spread} K
@@ -1888,14 +1927,14 @@ net-effect assessment:
 | 3.1 -- E applied to net thickness | MEDIUM | Reconcile E with its gross-thickness definition | Understates capacity 1.4-10x |
 | 3.2 -- porosity not qualified | LOW | Confirm total vs effective (Phase 9) | None, if confirmed total |
 | 4.1 -- gauge fed to absolute consumers | MEDIUM | Add `P_atm` at one call site | Understates capacity <=4.1%; overstates headroom <=3.3% |
-| 4.2 -- z not datum-corrected | HIGH | Not correctable; datum unknown | Overstates capacity 8-36% |
+| 4.2 -- hydraulic reference (water level) of z unstated | HIGH | Establish the water level per well; depth datum documented for 4 wells, unknown for TRECATE\|9\|ST | Direction not established; sensitivity only (original entry "Overstates capacity 8-36%", superseded) |
 | 4.3 -- z is total depth | MEDIUM | Needs a reservoir reference depth that does not exist | Overstates capacity |
 | 5.1 -- far-field dP vs near-well limit | HIGH | Evaluate fracture check at wellbore radius | Overstates rate ceiling 3.2x |
 | 5.2 -- depth and pressure inconsistent | HIGH | Tie CLI depth and pressure together | Overstates headroom 1.7x |
 | 6.3 -- Fertl-Wichmann above Squarci-Taffi | MEDIUM | Reverse the rank, or justify it | 3.8% on capacity at TRECATE |
 
-The directions do not agree: 3.1 understates capacity while 4.2, 4.3 and 6.6
-overstate it. That is precisely why the combined assessment was deferred rather
+The directions do not agree: 3.1 understates capacity while 4.3 and 6.6
+overstate it, and the direction of 4.2 is not established. That is precisely why the combined assessment was deferred rather
 than fixing them one at a time.
 
 The characterisation tests added in Phases 4, 5 and 6 pin the current behaviour
@@ -2075,7 +2114,7 @@ band, because none of them is represented as a sampled quantity:
 
 | Finding | Effect on capacity | Inside the band? |
 | --- | --- | --- |
-| 4.2 -- `z` not datum-corrected | overstates 8-36% | **no** |
+| 4.2 -- hydraulic reference of `z` (depth datum documented for 4 wells; water level unstated) | sensitivity, direction not established (original entry "overstates 8-36%", superseded) | **no** |
 | 6.6 -- uncorrected BHT | overstates up to 18.6% | **no** |
 | 6.3 -- temperature method rank | 3.8% at TRECATE | **no** |
 | 3.1 -- E applied to net thickness | understates 1.4-10x | **no** |
@@ -3092,6 +3131,11 @@ other way, and is this finding.
 
 **REVIEW REQUIRED. Severity HIGH (unchanged). Magnitude narrowed from Phase 4.**
 
+> **Revised 2026-09-24.** Read this finding with *Finding 4.2 / 10.2 revision*
+> below. The `rho*g*quota` shift in the table moves the assumed water level from
+> ground to sea level. It is not the removal of a datum or derrick-height error.
+> The numbers are unchanged.
+
 Every one of the seven wells has `depth_datum = unknown` and `depth_msl_m =
 MISSING`, exactly as Phase 4 described. But **`surface_elevation_m` is PRESENT
 for all seven** (from the GEOTHOPICA `quota` column).
@@ -3115,16 +3159,170 @@ rotary-table referenced, with brine at 1060 kg/m3:
 | TRECATE\|9\|ST | 6 087.0 | 139.0 | 63.275 | 61.830 | 2.34% | +1.37% |
 | MALOSSA\|15 | 5 491.0 | 111.0 | 57.079 | 55.925 | 2.06% | +1.10% |
 
-**The real-data capacity bias is +1.10% to +15.59%, not the 8-36% Phase 4
-estimated.** Phase 4's figures used illustrative depths; these use the actual
-ingested values and supersede them. The bias is strongly depth-dependent -- it is
-an absolute elevation offset against a growing column, so shallow wells suffer
-most. SALUZZO|1 at 310 m elevation on a 1 527.5 m well is the worst case in this
-set.
+**On the real data the ground-to-sea shift is worth +1.10% to +15.59% on
+capacity**, not the 8-36% Phase 4 estimated *(originally reported here as a
+"capacity bias"; superseded by the banner above)*. Phase 4's figures used
+illustrative depths; these use the actual ingested values and supersede them.
+The shift is strongly depth-dependent -- an absolute elevation offset against a
+growing column, so it is largest in shallow wells. SALUZZO|1 at 310 m elevation
+on a 1 527.5 m well is the largest in this set.
 
-One caveat on the correction itself: GEOTHOPICA `quota` is a **ground**
+~~One caveat on the correction itself: GEOTHOPICA `quota` is a **ground**
 elevation, while a rotary table stands some metres above ground. The figures
-above therefore slightly understate the true correction, by the derrick height.
+above therefore slightly understate the true correction, by the derrick height.~~
+*Withdrawn 2026-09-24:* the workbook depths are already below-ground depths (see
+the revision below), so the rotary-table height has already been removed from
+`z`.
+
+### Finding 4.2 / 10.2 revision -- depth datum vs hydraulic reference
+
+**Documentation revision, 2026-09-24. Status: REVIEW REQUIRED. Severity HIGH
+(unchanged). No number, equation, test or baseline changed.**
+
+Findings 4.2 and 10.2 treated one quantity as a single "datum" problem. It is
+two questions, with different answers.
+
+| Question | Status |
+| --- | --- |
+| 1. **Depth datum:** what surface is `depth_m` measured from? | **Supported** for SALUZZO\|1, DESANA\|1, ASTI\|1, MALOSSA\|15. Unknown for TRECATE\|9\|ST. |
+| 2. **Hydraulic reference:** where is the water level, i.e. where does the brine column begin? | **Unresolved** for all five wells. |
+
+#### 1. Depth datum -- supported for four wells
+
+The AGIP composite logs state that their depths run from the rotary table. The
+workbook `Anagrafica` depth equals the operator's rotary-table total depth
+**minus the rotary-table height**, exactly, in all four documented wells:
+
+| Well | Operator statement (composite log) | Rotary table / ground (m a.s.l.) | RT height (m) | Operator TD, RT (m) | Workbook `depth_m` (m) |
+| --- | --- | --- | --- | --- | --- |
+| SALUZZO\|1 | "riferite al P.T.R." (data printout) | 313.20 / 310.00 | 3.20 | 1530.7 | 1527.5 |
+| DESANA\|1 | "Tutte le profondità sono riferite al piano tavola rotary" | 145.60 / 142.00 | 3.60 | 3228.50 | 3224.9 |
+| ASTI\|1 | "riferite al P.T.R." (data printout) | 135.00 / 132.00 | 3.00 | 1250.0 | 1247.0 |
+| MALOSSA\|15 | "Tutte le profondità sono riferite al piano tavola rotary" | 120.00 / 111.00 | 9.00 | 5500 ("5500 v.5497~") | 5491.0 |
+| TRECATE\|9\|ST | No operator document in the project or in ViDEPI's public well list | workbook `quota` 139 only | unknown | unknown | 6087.0 |
+
+Sources: `data/PDF/saluzzo_001.pdf`, `desana_001.pdf`, `asti_001.pdf`,
+`malossa_015.pdf` (single-sheet ViDEPI composite logs, header elevation block
+and observations column / data printout).
+
+- For these four wells `depth_m` therefore **behaves as a below-ground depth**,
+  and `quota` is the ground elevation.
+- The relation is an arithmetic identity across four independent wells. No
+  document states that GEOTHOPICA converted the depths.
+- Conversion to depth below sea level, `depth_m - quota`, is **mathematically
+  valid** for these four wells.
+- The workbook is not internally uniform: ASTI|1's deepest `Lito-Stratigrafie`
+  bottom (1250.0) is rotary-table referenced, while its `Anagrafica` depth is
+  not. A datum label has to be per column, not per workbook.
+- For TRECATE|9|ST the project holds only the workbook row (`quota` 139,
+  `profondità` 6087) and depths of 6096 in `pozzi-storici.csv` and
+  `po_wells_clean.csv`. No datum metadata exists. As a sidetrack, whether 6087 m
+  is along-hole or vertical is also unrecorded.
+
+#### 2. What the current code assumes about the water level
+
+- `resolve_inputs` passes `float(record.depth_m.value)` as `z`
+  (`src/ccs_screen/ingest/scenario.py:333-334`).
+- `hydrostatic_pressure_pa` returns `rho * g * z`
+  (`scenario.py:130`). It returns 0 at `z = 0`.
+- So the brine column, and the zero of gauge pressure, start at `z`'s reference
+  surface: **ground level** for the four wells above. The code contains no
+  water-level variable, and this assumption is nowhere stated.
+- Fracture pressure uses the same `depth_m`
+  (`src/ccs_screen/ingest/completeness.py:171-172`, then
+  `pressure.fracture_pressure_pa`). Both sides of the headroom comparison share
+  that zero.
+- The provenance `rationale` for derived pressure (`scenario.py`, the
+  `hydrostatic_from_depth` branch) still carries the superseded framing: *"not
+  corrected to a sub-sea datum ... this overstates the brine column"*. That is
+  code text and is not changed here. It is recorded as a disclosure follow-up.
+
+#### 3. What Finding 10.2's correction actually does
+
+Finding 10.2 replaces `z` with `z - quota`. Because `P = rho*g*z` is linear, the
+pressure falls by exactly `rho*g*quota`.
+
+- Given the depth evidence above, `z - quota` is depth below **sea level**, and
+  no air gap is being removed.
+- The change therefore moves the assumed water level from **ground** to **sea
+  level**. It is a change of hydraulic assumption, **not** the removal of a
+  datum or derrick-height error.
+- The +1.10% to +15.59% capacity figures in Finding 10.2 are the **sensitivity
+  of capacity to that choice**. They are not a measured bias of the current
+  code.
+- The direction of any error in the current code is **not established**. It is
+  anti-conservative only if the true water level lies below ground.
+- Applied to reservoir pressure alone, the shift would also move only one side
+  of the headroom comparison, because fracture pressure keeps the ground zero.
+- Finding 4.2's sentence *"the brine column starts at the water table"* is
+  consistent with the current code only if the water table is at ground. It is
+  consistent with Finding 10.2's table only if the water table is at sea level.
+  Neither has been shown.
+
+#### 4. Hydraulic reference -- evidence per well
+
+All four composite logs were read in full, including the data printouts. ViDEPI
+was checked for further well documents. No regional compilation is substituted.
+
+| Well | What exists | What it establishes |
+| --- | --- | --- |
+| SALUZZO\|1 | Printout: "PROVE DI STRATO", "PROVE DI PRODUZIONE", "WIRELINE FORMATION TESTS", "LEAK OFF TEST", "ANALISI" all **NESSUNA/NESSUNO**. Result: "mineralizzato ad acqua dolce e salata". | **No pressure or water-level measurement was made.** |
+| DESANA\|1 | Formation test 2, 11-12/4/1954, 3059.12-3228.50 m (RT): salt water, NaCl 13.37 g/l, SG 1.0130 at 15 °C, 750 l recovered in empty drill pipe after 35 h 05 min; **no pressure recorded**. Production tests (1954, 1955, 1957), 2406-2465.50 m, Tortonian gas: wellhead shut-in 223 / 155 / 148 atm. Tubing pressure 197 atm (1955) to 73 atm (1961). | Water-zone test: transient recovery only, no pressure. Pressures are **wellhead pressures on a producing gas column**, not aquifer head. Gauge/absolute unstated. |
+| ASTI\|1 | Nine formation tests and two production tests (printout "PROVE DI STRATO", "PROVE DI PRODUZIONE"). Pressures recorded as "Pressione statica di giacimento": 111 kg/cm² at 1139 m (q. -1004), 88 at 1129 m (q. -994), 64.5 at 861 m (q. -726), each marked **"non stabil."**; 96.6 at 1130 m "non stabilizzata"; 96.6 at 861 m (test "INSODDISFACENTE", mixed gas + salt water); 95 at 1167 m (q. -1032), production test 1 "non è interpretabile". Tubing liquid levels 335 m (production test 1, Nov 1958) and 750 m P.T.R. (production test 2, Oct 1963). | Every recorded pressure is **non-stabilised, gas-bearing or mixed, or from a failed/uninterpretable test**. The operator notes the final build-up of test 6 is below virgin pressure. The liquid levels are end-of-test levels in a gas/water well, not static levels. Gauge depths are rotary-table referenced. Gauge/absolute unstated. |
+| MALOSSA\|15 | Observations column: formation tests in open hole and in casing, production tests, swab tests, analyses, vacuum test all **"Nessuna/Nessuno"**. Gas/condensate production from Zandobbio from 25/9/1979, no pressure given. | **No pressure or water-level measurement is recorded.** |
+| TRECATE\|9\|ST | No composite log or well report in the project or ViDEPI's public well list. | **No evidence.** |
+
+Two anomalies in the ASTI|1 printout are recorded, not resolved: tests 7 and 9
+print the same 96.6 kg/cm² at gauge depths 269 m apart, and the printed sub-sea
+values place the gauge-depth reference at 135 m, the rotary table, not the
+ground.
+
+**Conclusion:** the repository contains **no stabilised static water level and
+no stabilised water-bearing formation pressure** for any of the five wells. The
+evidence cannot distinguish water level at ground, at sea level, or at another
+well-specific head.
+
+#### 5. Minimum evidence before any numerical correction can be authorised
+
+Per well, independently -- a measurement from one well is not transferred to
+another:
+
+1. A **stabilised static formation pressure** or a **static water level**,
+2. from a **water-bearing** interval,
+3. with the measurement depth **and its depth datum** stated,
+4. the **pressure datum/reference** stated,
+5. **gauge or absolute** stated,
+6. and the **fluid** in the measured interval and wellbore column identified.
+
+Pressures from gas-bearing intervals would additionally need the gas-water
+contact and gas gradient before they could bear on water head. The likely source
+is each well's AGIP final well report and the original test charts. Archive
+references printed on the logs: SALUZZO 1 cod. 01547, ASTI 1 cod. 01497, DESANA 1
+stamp 40593, MALOSSA 15 "Col 3784". For SALUZZO|1 and MALOSSA|15 the logs record
+that no tests were run, so a direct measurement may not exist. A numerical change
+would then need an explicit, disclosed owner decision on the water level, not an
+unstated default.
+
+#### 6. Not changed
+
+No model output, hydrostatic equation, baseline test or code changed. No
+water-level parameter was introduced. Neither ground level nor sea level is
+adopted: the finding stays open.
+
+Every passage that stated a datum error or a known direction for Finding 4.2 /
+10.2 has been corrected in place, with the original wording quoted where it was
+replaced. The only passages retained as original reasoning are labelled where
+they stand:
+
+- the Finding 4.2 title and body (Phase 4), under its revised status line and
+  closing revision note;
+- the Finding 10.2 opening, magnitude table and column labels, under the
+  revision banner at the head of that finding;
+- the `rationale` string quoted under *Baseline freeze and disclosure-only
+  fixes*, which records code text as written.
+
+Combined factors that include the 4.2 term are marked **conditional on a
+sea-level water level**: Findings 11.2, 12.4 and 12.5.
 
 ### Finding 10.3 -- source depth conflicts are small, real, and fully recorded
 
@@ -3142,7 +3340,8 @@ value:
 | ASTI\|1 | 1 247.0 | 1 250.0 (two independent sources) | 0.24% |
 | MALOSSA\|15 | 5 491.0 | 5 497.0 (two independent sources) | 0.11% |
 
-All below 0.25%, negligible against Finding 10.2's 2-25%. The provenance quality
+All below 0.25%, negligible against the 2-25% pressure shift in Finding 10.2 (a
+ground-to-sea water-level sensitivity, not an error magnitude). The provenance quality
 here is high: a reader can go to the exact row of the exact file that was not
 used.
 
@@ -3198,7 +3397,7 @@ where it is mostly depth, at a glance.
 | Gross/net separation | PASS | - | Never substituted; would have been 10x-32x | None |
 | Phase 6 disclosure fix | PASS | - | Separates 0 m from 738 m disagreements live | None |
 | **T observation below total depth** | **REVIEW REQUIRED** | **MEDIUM** | TRECATE: 6 247.9 m obs in a 6 087.0 m well; no check exists | Documented |
-| **Datum bias, quantified** | **REVIEW REQUIRED** | **HIGH** | +1.10% to +15.59% on capacity; elevation already ingested | Supersedes Phase 4 magnitude |
+| **Hydraulic-reference sensitivity, quantified** (original label "Datum bias, quantified", superseded) | **REVIEW REQUIRED** | **HIGH** | +1.10% to +15.59% on capacity if the water level is moved from ground to sea level; direction not established | Supersedes Phase 4 magnitude |
 | Two blocked payload shapes | PASS WITH CAVEAT | LOW | Both documented; a client must handle both | Documented |
 
 ### Scientific numbers changed?
@@ -3210,15 +3409,20 @@ where it is mostly depth, at a glance.
 Phase 10 revises one frozen entry and adds one:
 
 - **Finding 4.2's magnitude narrows from 8-36% to +1.10%-+15.59% on capacity**,
-  now measured on the actual ingested elevations rather than illustrative
-  depths. The severity stays HIGH because SALUZZO|1 at +15.6% is the worst case
-  in a seven-well sample, not a bound, and because the bias is systematic and
-  one-directional.
+  now computed on the actual ingested elevations rather than illustrative
+  depths. *Revised 2026-09-24:* this range is the sensitivity of capacity to
+  moving the assumed water level from ground to sea level. It is not a measured
+  bias, and its direction is not established. The severity stays HIGH because
+  the water level is unresolved and SALUZZO|1 at +15.6% is the largest
+  sensitivity in a seven-well sample, not a bound.
 - **Finding 10.2 identifies the missing piece**: elevation is already ingested
   for all seven wells. Only the datum label is absent. That converts Finding 4.2
   from "not correctable" to "correctable if the AGIP rotary-table statement can
   be established for these wells", which is a materially different proposition
   for the owner.
+  *Revised 2026-09-24:* the datum label is now established for four wells, and
+  those depths are already below ground. Correctability now depends on the
+  hydraulic reference, which is unresolved (*Finding 4.2 / 10.2 revision*).
 - **Finding 10.1 is new** and belongs to Phase 12's cross-model consistency
   list, alongside the closed-trap/infinite-aquifer and duplicate-thickness items.
 
@@ -3230,13 +3434,20 @@ Nothing blocks Phase 11.
 ### Remaining uncertainty
 
 1. **Seven wells is a sample, not a survey.** The corpus holds 46 normalized
-   records; the datum-bias range of +1.10% to +15.59% is what these seven show,
-   and a shallower well with a higher elevation would be worse.
+   records; the +1.10% to +15.59% ground-to-sea hydraulic-reference sensitivity
+   is what these seven show, and it is not a bound for the corpus.
 2. **The rotary-table assumption is still unproven for these wells.** Finding
    10.2's figures assume the AGIP convention applies. If some depths are
    ground-level referenced, their correction is smaller.
+   *Revised 2026-09-24:* answered for SALUZZO|1, DESANA|1, ASTI|1 and
+   MALOSSA|15. The operator depths are rotary-table referenced, and the workbook
+   depths are those values minus the rotary-table height, i.e. below ground.
+   TRECATE|9|ST remains unknown.
 3. **`quota` is a ground elevation, not a rotary-table elevation.** The
    correction is understated by the derrick height, which no source records.
+   *Revised 2026-09-24:* withdrawn. The rotary-table heights are documented
+   (3.20, 3.60, 3.00, 9.00 m) and already removed from the workbook depths. The
+   remaining open item is the hydraulic reference, not the derrick height.
 4. **TRECATE's 160.9 m overshoot is unexplained.** Whether the total depth or
    the temperature depth is wrong cannot be determined from the structured
    sources; resolving it would need the composite log.
@@ -3388,14 +3599,22 @@ both scientific changes to a frozen module. But the justification recorded in
 `properties.py` should be revisited, because the population it appeals to is not
 the population in the data.
 
-### Finding 11.2 -- the EOS bias and the datum bias are complementary, not additive-in-the-worst-case
+### Finding 11.2 -- the EOS bias and the hydraulic-reference sensitivity vary in opposite ways with depth
 
 **PASS WITH CAVEAT. Severity LOW. Interpretation.**
 
-Both Finding 10.2 (datum) and Finding 11.1 (EOS) overstate capacity, so they
-compound. But they are strongest at opposite ends of the depth range:
+*Revised 2026-09-24.* As originally written (title: "the EOS bias and the datum
+bias are complementary"), this finding treated Finding 10.2 as a datum bias that
+overstates capacity, and summed it with Finding 11.1. Finding 10.2 is now a
+hydraulic-reference sensitivity whose direction is not established (*Finding 4.2
+/ 10.2 revision*). The "Combined" column below therefore holds **only if the
+water level is at sea level**. The numbers are retained unchanged as that
+conditional case.
 
-| Well | Depth (m) | Datum bias (10.2) | EOS bias (11.1) | Combined |
+Finding 11.1 (EOS) overstates capacity; that direction is established. The 10.2
+sensitivity and the 11.1 bias are largest at opposite ends of the depth range:
+
+| Well | Depth (m) | 10.2 sensitivity, ground to sea level | EOS bias (11.1) | Combined (conditional) |
 | --- | --- | --- | --- | --- |
 | SALUZZO\|1 | 1 527.5 | **+15.59%** | +0.55% | ~+16.2% |
 | ASTI\|1 | 1 247.0 | +10.87% | (near-critical region) | - |
@@ -3403,14 +3622,15 @@ compound. But they are strongest at opposite ends of the depth range:
 | MALOSSA\|15 | 5 491.0 | +1.10% | **+7.42%** | ~+8.6% |
 | TRECATE\|9\|ST | 6 087.0 | +1.37% | **+7.07%** | ~+8.5% |
 
-The datum bias is an absolute elevation offset against a growing column, so it
-shrinks with depth; the EOS bias grows with pressure. The result is a combined
-overstatement of roughly **6% to 16% across the depth range**, more uniform than
-either term alone and never self-cancelling.
+The 10.2 sensitivity is an absolute elevation offset against a growing column,
+so it shrinks with depth; the EOS bias grows with pressure. If the water level
+were at sea level, the sum would be an overstatement of roughly **6% to 16%
+across the depth range**. Without that condition the 10.2 term has no
+established sign, and no combined range is stated.
 
-This is an estimate of the combined direction and scale, not a correction. It
-does not include Finding 3.1, which runs the other way at 1.33x-4x and is far
-larger than both.
+This is a conditional scenario, not an estimate of the tool's bias and not a
+correction. It does not include Finding 3.1, which runs the other way at
+1.33x-4x and is far larger than both.
 
 ### Findings table
 
@@ -3425,7 +3645,7 @@ larger than both.
 | Exponential integral | PASS | - | Own series/continued fraction matches scipy to 0.00e+00 | None |
 | Theis dP, fracture pressure, headroom, Qmax | PASS | - | Exact, all four | None |
 | **34% of the corpus is outside the validated EOS envelope** | **REVIEW REQUIRED** | **MEDIUM-HIGH** | 15/44 wells above 35 MPa; mean error 7.29% vs 2.63% | Documented |
-| EOS and datum biases compound | PASS WITH CAVEAT | LOW | Combined ~+6% to +16% across the depth range | Documented |
+| EOS bias plus hydraulic-reference sensitivity (original label "EOS and datum biases compound", superseded) | PASS WITH CAVEAT | LOW | ~+6% to +16% only if the water level is at sea level; 10.2 direction not established | Documented |
 
 ### Scientific numbers changed?
 
@@ -3449,9 +3669,10 @@ Phase 12 inherits:
   the Peneloux shift. Phase 1 left the shift in place on a premise about the
   well population; Phase 11 measured that population and the premise does not
   hold.
-- **Finding 11.2**, the combined-direction estimate, which belongs with the
-  Phase 7 Finding 7.2 point that none of these biases is inside the reported
-  uncertainty band.
+- **Finding 11.2**, now a conditional sum that holds only if the water level is
+  at sea level (see its revision note). What carries forward unconditionally is
+  Finding 11.1's EOS bias, which, with the Phase 7 Finding 7.2 point, lies
+  outside the reported uncertainty band.
 
 ### Remaining uncertainty
 
@@ -3571,43 +3792,57 @@ remains a data-quality defect worth fixing, but it is not a numerical problem.
 Convention: **factor = true / reported**. A factor above 1 means the tool
 **understates** capacity.
 
+*Revised 2026-09-24.* The 4.2 row (original label "4.2 depth datum", direction
+"overstates") is the ground-to-sea hydraulic-reference sensitivity from Finding
+10.2. It is not a measured bias, and its direction is not established (*Finding
+4.2 / 10.2 revision*). Every product below that includes it is therefore
+**conditional on a sea-level water level**: the Combined row, the [1.15, 3.76]
+interval and the "Excluding Finding 3.1" factors. The numbers are retained
+unchanged as that conditional calculation.
+
 | Finding | SALUZZO\|1 | DESANA\|1 | MALOSSA\|15 | TRECATE\|9\|ST | Direction |
 | --- | --- | --- | --- | --- | --- |
 | 3.1 net-to-gross double count | x1.33-4.00 | x1.33-4.00 | x1.33-4.00 | x1.33-4.00 | understates |
 | 4.1 gauge -> absolute | x1.0032 | x1.0018 | x1.0009 | x1.0009 | understates |
-| 4.2 depth datum | x0.8651 | x0.9733 | x0.9891 | x0.9865 | overstates |
+| 4.2 hydraulic reference, if water level at sea level | x0.8651 | x0.9733 | x0.9891 | x0.9865 | not established |
 | 11.1 EOS vs Span-Wagner | x0.9945 | x0.9648 | x0.9309 | x0.9340 | overstates |
-| **Combined** | **x1.15-3.45** | **x1.25-3.76** | **x1.23-3.69** | **x1.23-3.69** | **understates** |
+| **Combined (conditional)** | **x1.15-3.45** | **x1.25-3.76** | **x1.23-3.69** | **x1.23-3.69** | **understates** |
 
-**Across all four wells: true / reported lies in [1.15, 3.76].**
+**Conditional on a sea-level water level: true / reported lies in [1.15, 3.76].**
 
-The reported capacity is **understated** -- by at least 15%, and plausibly by a
-factor of nearly four. That is the opposite of what the individual HIGH-severity
-findings suggested in isolation, and it is entirely due to Finding 3.1, which is
-larger than everything else combined.
+Under that condition the reported capacity is **understated** -- by at least
+15%, and plausibly by a factor of nearly four. The direction does not depend on
+the condition: Finding 3.1 alone (x1.33-4.00) understates capacity and is larger
+than every other row. That is the opposite of what the individual HIGH-severity
+findings suggested in isolation.
 
-**Excluding Finding 3.1**, the remaining biases give:
+**Excluding Finding 3.1**, the remaining rows give (conditional on a sea-level
+water level):
 
-| Well | Factor without 3.1 |
+| Well | Factor without 3.1 (conditional) |
 | --- | --- |
 | SALUZZO\|1 | x0.8632 |
 | DESANA\|1 | x0.9407 |
 | MALOSSA\|15 | x0.9216 |
 | TRECATE\|9\|ST | x0.9222 |
 
-i.e. capacity **overstated by 6% to 16%** -- which reproduces the Phase 11
-Finding 11.2 estimate independently, from a different construction.
+i.e., if the water level is at sea level, capacity **overstated by 6% to 16%**
+-- which reproduces the conditional Finding 11.2 sum independently, from a
+different construction. Without that condition the 4.2 term has no established
+sign, and no range is stated here.
 
 So the decision structure is simple and sharp:
 
-- **Finding 3.1 is the only finding that matters at first order.** Everything
-  else, combined, moves the answer by less than 16%.
+- **Finding 3.1 is the only finding that matters at first order.** Every other
+  row is smaller. The rows with an established direction (4.1, 11.1) are small
+  beside it, and 4.2 is a sensitivity of unestablished direction (up to +15.59%
+  on capacity in Finding 10.2).
 - Finding 3.1 was confirmed in Phase 9 **from both primary sources**: CSLF's
   storage-efficiency factor demonstrably contains a net-to-gross term of
   0.25-0.75, and the API demands net thickness before applying it.
-- The remaining findings partially offset it, and among themselves the
-  overstatements (4.2, 11.1) dominate the understatements (4.1) by roughly
-  10:1.
+- Among the remaining rows with an established direction, the overstatement
+  (11.1) dominates the understatement (4.1). 4.2 is left out of that comparison
+  because its direction is not established.
 
 ### Finding 12.5 -- the systematic bias is wider than the uncertainty band
 
@@ -3617,16 +3852,20 @@ For a SALUZZO-like configuration the reported band is
 `P10 = 5.264, P50 = 10.915, P90 = 20.742 Mt`, i.e. a multiplicative range of
 **x0.482 to x1.900** around P50.
 
-The combined systematic bias for the same well is **x1.15 to x3.45**.
+The combined systematic bias for the same well was stated as **x1.15 to
+x3.45**. *Revised 2026-09-24:* that range includes Finding 4.2 as a directional
+bias, so it is **conditional on a sea-level water level** (Finding 12.4
+revision note). It is retained below as that conditional case.
 
 | | Lower | Upper | Span |
 | --- | --- | --- | --- |
 | Reported uncertainty band (P10-P90) | x0.482 | x1.900 | 3.9x |
-| Combined systematic bias | x1.15 | x3.45 | 3.0x |
+| Combined systematic bias (conditional on sea-level water level) | x1.15 | x3.45 | 3.0x |
 
 **The bias upper bound (3.45) lies far above the band upper bound (1.90).** The
-true value can sit entirely outside the reported P10-P90 interval -- above P90,
-not merely near its edge.
+conclusion does not depend on Finding 4.2: Finding 3.1 alone reaches x4.00
+(Finding 12.4 table), also above 1.90. The true value can sit entirely outside
+the reported P10-P90 interval -- above P90, not merely near its edge.
 
 This is Phase 7 Finding 7.2 in its sharpest form. The band is computed from two
 literature ranges (Phase 7 Finding 7.1 showed pressure contributes 0% and area,
@@ -3672,8 +3911,10 @@ last place of a double.
 **No arithmetic defect was found anywhere in the codebase.** Not one.
 
 What the audit did find is a set of **scientific and semantic** issues: an
-efficiency factor applied against the wrong thickness convention, depths not
-corrected to a datum, an equation of state used a third of the time outside the
+efficiency factor applied against the wrong thickness convention, an unstated
+hydraulic (water-level) reference behind the hydrostatic pressure -- the depth
+datum itself is documented for four wells and unresolved for TRECATE|9|ST --
+an equation of state used a third of the time outside the
 range it was validated over, a gauge pressure supplied where an absolute one is
 required, and an uncertainty band narrower than the biases it omits.
 
@@ -3692,17 +3933,19 @@ accurate against both primary sources, and the recorded Donda 1%/4% discrepancy
 proved not only real but resolvable in the project's favour from the paper's own
 table arithmetic.
 
-**On science: with material qualifications.** The headline number is biased by a
-factor between 1.15 and 3.76, and the reported uncertainty band does not contain
-that bias.
+**On science: with material qualifications.** Finding 3.1 alone biases the
+headline number low by a factor of 1.33 to 4.00. The combined factor with the
+other findings is conditional on the unresolved water level (Finding 12.4). The
+reported uncertainty band does not contain that bias.
 
 ## The finding that matters
 
 Of the 20 open findings, **one dominates**: Finding 3.1. The CSLF storage
 efficiency factor contains a net-to-gross term of 0.25-0.75 -- confirmed in
 Phase 9 from CSLF-T-2008-04 itself -- and the API requires **net** thickness
-before applying it, so the reduction lands twice. Everything else in this audit,
-combined, moves the answer by less than 16%.
+before applying it, so the reduction lands twice. Everything else in this audit
+is smaller. The one term without an established direction is Finding 4.2's
+hydraulic-reference sensitivity (up to +15.59% on capacity in Finding 10.2).
 
 The regional precedent the project follows, Donda et al. (2011), does the same
 thing and explicitly: it defines `h` as "average thickness of aquifer x average
@@ -3724,7 +3967,7 @@ The five HIGH findings:
 
 | # | Finding | Effect | Scope |
 | --- | --- | --- | --- |
-| 4.2 | Depth not datum-corrected | Capacity +1.1% to +15.6% | API + frontend |
+| 4.2 | Hydraulic reference (water level) unestablished; depth datum supported for 4 wells | Capacity sensitivity +1.1% to +15.6% (ground vs sea-level water level); direction unestablished | API + frontend |
 | 5.1 | Far-field dP vs near-well fracture limit | Rate ceiling 3.20x | CLI only |
 | 5.2 | Depth and initial pressure inconsistent | Headroom 1.72x | CLI only |
 | 12.1 | Closed trap vs infinite aquifer | Rate ceiling, unbounded | CLI only |
@@ -3741,10 +3984,14 @@ contains three of them.
 2. **Disclose Finding 12.5.** One sentence in the API payload stating that the
    band covers two literature ranges and excludes systematic bias. Costs
    nothing, prevents the most likely misreading.
-3. **Establish the depth datum (Finding 4.2 / 10.2).** The elevations are
-   **already ingested** for every well; only the datum label is missing, and
-   `docs/ingestion.md` already quotes the AGIP statement that depths run from
-   the rotary table. This is the cheapest real correction available.
+3. **Establish the hydraulic reference (Finding 4.2 / 10.2).** The depth
+   datum is now supported for four wells: the workbook depths are below ground.
+   Subtracting `quota` would not remove a datum error. It would move the assumed
+   water level from ground to sea level, and no evidence supports either. Obtain
+   a stabilised static formation pressure or static water level from a
+   water-bearing interval, per well, with depth datum, pressure datum,
+   gauge/absolute status and fluid identified (*Finding 4.2 / 10.2 revision*,
+   item 5). Only then consider a numerical change.
 4. **Revisit the Peneloux justification (Finding 11.1).** `properties.py` keeps
    the shift because "most Italian pilot reservoirs sit below 20 MPa". Measured:
    15 of 44 wells exceed 35 MPa and the deepest exceed 65 MPa.
@@ -3769,7 +4016,11 @@ since all three concern the same composition.
 
 **Not verified:**
 
-- Any measured formation pressure. None exists in the dataset.
+- Any hydraulic head. Measured formation-test and wellhead pressures exist in
+  the DESANA|1 and ASTI|1 composite logs, but none is a stabilised pressure or
+  static water level from a water-bearing interval, so no hydraulic reference
+  was established (*Finding 4.2 / 10.2 revision*). The structured sources
+  contain no pressure at all.
 - Any stabilised bottom-hole temperature. Zero of 452 records.
 - Any net-to-gross ratio, permeability, or area for any well.
 - Whether the aquifers are laterally open or compartmentalised.
