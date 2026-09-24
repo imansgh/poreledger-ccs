@@ -995,9 +995,12 @@ tables, the "Direction of the error" paragraph and the statement that the datum
 is unknown are kept unchanged above as history. They are **not** measurements of
 a datum error, and the direction they state is not established.
 
-### Finding 4.3 -- z is total well depth, not a reservoir reference depth
+### Finding 4.3 -- State-point depth is total depth; no storage interval is designated
 
-**REVIEW REQUIRED. Severity MEDIUM. Anti-conservative.**
+**REVIEW REQUIRED. Severity MEDIUM. Direction and magnitude not established.**
+*(Original title "z is total well depth, not a reservoir reference depth" and
+original status "Anti-conservative", both superseded. The current framing is*
+Finding 4.3 revision *at the end of this finding.)*
 
 `docs/ingestion.md` documents `depth_m` as *"total depth; datum usually
 unstated"*, and the three ingestion call sites capture it from the sources'
@@ -1009,14 +1012,59 @@ a well drilled through and past its objective, TD sits below the storage
 interval, so the pressure used to evaluate CO2 density is the pressure at a
 depth where no storage occurs.
 
-No reservoir reference depth exists anywhere in the codebase. `thickness_m` is
-a net thickness with no associated top depth, so even a midpoint cannot be
-constructed -- `top + h/2` has no `top`. Note that the temperature path does
-better: `RESERVOIR_DEPTH_FRACTION = 0.85` at least filters temperature
-observations to those near TD. The pressure path has no equivalent.
+No designated storage interval or state-point depth exists in the current
+model. The ingested stratigraphic intervals do carry tops and bottoms, but they
+record chronostratigraphic units (by age; no formation name for the five
+screened wells) and are not designated as the CO2 storage interval.
+`thickness_m` is a net thickness with no associated top depth, so even a
+midpoint cannot be constructed -- `top + h/2` has no `top`. Note that the
+temperature path does better: `RESERVOIR_DEPTH_FRACTION = 0.85` at least
+filters temperature observations to those near TD. The pressure path has no
+equivalent. In practice the selected temperature also sits near TD
+(Finding 12.3), so both halves of the state point are at about TD.
 
 No correction proposed. Choosing a reservoir datum is exactly the kind of
 invented reference depth this phase is forbidden to introduce.
+
+#### Finding 4.3 revision -- direction and magnitude of the state-point depth
+
+*Documentation revision. No equation, parameter, test or baseline changed. No
+reservoir interval, geothermal gradient or state-point convention is adopted.*
+
+The original "Anti-conservative" status assumed that moving the state point from
+TD to a shallower storage interval lowers pressure while temperature stays
+fixed. The pipeline does not hold temperature fixed: it takes temperature near
+TD as well (Finding 12.3). If a storage interval were designated above TD, both
+pressure and temperature at that point would be lower, and CO2 density responds
+to the two in opposite directions.
+
+A read-only sensitivity run illustrates this. These are **sensitivity brackets,
+not corrections**, and **not a basis for changing the production model**. The
+shifts of 100 m and 300 m are arbitrary offsets, not reservoir depths; 25 and
+30 K/km are brackets (the cited methodology's default and the audit's generic
+value), not per-well gradients. Values are density at TD relative to the
+shallower point, five screened wells, rho_brine = 1060 kg/m3; positive means TD
+gives the higher density:
+
+| Case | 100 m above TD | 300 m above TD |
+| --- | --- | --- |
+| Temperature held fixed | +1.0% to +7.6% | +3.1% to +47.7% |
+| Temperature moved at 25 K/km | +0.1% to +1.7% | +0.2% to +7.2% |
+| Temperature moved at 30 K/km | -0.4% to +0.6% | -1.4% to +2.4% |
+
+- With temperature held fixed the effect is always positive and can be large.
+- With temperature moved consistently it is much smaller, and its sign changes
+  between the two brackets in some wells (SALUZZO|1, DESANA|1, MALOSSA|15).
+- The upper ends are ASTI|1, a near-critical case where density is especially
+  sensitive to the state point.
+
+**Status.** The direction and magnitude of the capacity effect are conditional
+on how pressure and temperature are reassigned to a storage interval, and are
+therefore not established for a physically designated storage state point.
+Resolving it needs, per well, a designated storage interval (top and base, depth
+datum, MD or TVD per Finding 4.4) and the temperature at that interval, plus an
+owner decision on the state-point convention. Finding 4.2's hydraulic reference
+also shifts the pressure at any chosen depth.
 
 ### Finding 4.4 -- depth is measured depth, not true vertical depth
 
@@ -1153,7 +1201,7 @@ undocumented (*Finding 4.1 revision*).
 | Brine density range | PASS | - | 10.00-10.79 kPa/m, between seawater and saline formation water | None |
 | **Pressure reference undeclared; gauge P fed to the EOS** | **REVIEW REQUIRED** | **MEDIUM** | `P(0) = 0` for hydrostatic and fracture pressure. EOS input: P50 +0.09% to +0.57% (5 screened wells), up to +2.53% density (44-well corpus); 4.15% in the synthetic 897 m case. Headroom +3.34% only if the gradient is absolute | Correction proposed, not applied |
 | **Hydraulic reference of z unstated** (original label "z not datum-corrected", superseded) | **REVIEW REQUIRED** | **HIGH** | Original: RT elevations 120.0 / 238.7 m, "P overstated 8.7-36.1%" on illustrative depths. Superseded: that is a sea-level water-level sensitivity, direction not established (*Finding 4.2 / 10.2 revision*) | Disclosure gap |
-| **z is total depth, not reservoir depth** | **REVIEW REQUIRED** | **MEDIUM** | `depth_m` = "total depth"; no reservoir datum exists | Documented |
+| **State-point depth is TD; no storage interval designated** | **REVIEW REQUIRED** | **MEDIUM** | `depth_m` = "total depth"; stratigraphic tops ingested but none designated as the storage interval; direction and magnitude not established | Documented |
 | z is MD, not TVD | PASS WITH CAVEAT | LOW-MED | "metres along-hole"; no deviation survey in any source | Documented |
 | Negative depth accepted | PASS WITH CAVEAT | LOW | Returns -1.03 MPa; `pressure.py` would reject | Documented |
 | Theis `delta_p` convention | PASS | - | A difference is offset-invariant | None |
@@ -1176,12 +1224,12 @@ revision*, Phase 10). What remains of 4.2 is a hydraulic-reference sensitivity:
 where the water level is assumed to stand. Its direction is not established.
 Finding 4.1 is a **0.1-1.1%** pressure understatement from the missing
 atmosphere in the synthetic Phase 4 cases, and
-Finding 4.3 an unquantified overstatement.
+Finding 4.3 an unquantified effect whose direction is not established (Finding 4.3 revision).
 
 Affected downstream quantities:
 
 - **Capacity** (Phase 3) inherits these through CO2 density. Direction: not
-  established for 4.2; understated by 4.1; overstated by 4.3.
+  established for 4.2; understated by 4.1; not established for 4.3.
 - **Injectivity ceiling** (Phase 5) inherits them through
   `allowable_delta_p_pa`. For 4.2 the direction depends on the unresolved water
   level, and a change applied to reservoir pressure alone would move only one
@@ -1219,9 +1267,10 @@ datum-error reading). That must not be rediscovered there as though it were new.
    TRECATE|9|ST. What remains is where the water level stands, which no
    measurement in the repository establishes. The size and the sign of the
    effect both depend on that assumption.
-2. **Finding 4.3 is unquantified.** Without a reservoir top depth, the gap
-   between total depth and storage-interval depth cannot be measured for any
-   well in this dataset.
+2. **Finding 4.3 is unquantified.** Without a designated storage interval, the
+   gap between total depth and storage-interval depth cannot be measured for any
+   well in this dataset, and the sign of its effect on density also depends on
+   how temperature is reassigned to that interval.
 3. **Well deviation is unknown** (Finding 4.4). The MD/TVD gap cannot be bounded
    without deviation surveys, which no source provides.
 4. **The fracture gradient has no primary source.** 0.6631 psi/ft is defensible
@@ -2003,13 +2052,13 @@ net-effect assessment:
 | 3.2 -- porosity not qualified | LOW | Confirm total vs effective (Phase 9) | None, if confirmed total |
 | 4.1 -- pressure reference undeclared; gauge fed to the EOS | MEDIUM | Declare the convention; add `P_atm` (not applied) | EOS input: understates capacity 0.09-0.57% (5 screened wells), up to 2.53% (corpus), 4.1% (synthetic 897 m case). Headroom: conditional on the gradient's convention |
 | 4.2 -- hydraulic reference (water level) of z unstated | HIGH | Establish the water level per well; depth datum documented for 4 wells, unknown for TRECATE\|9\|ST | Direction not established; sensitivity only (original entry "Overstates capacity 8-36%", superseded) |
-| 4.3 -- z is total depth | MEDIUM | Needs a reservoir reference depth that does not exist | Overstates capacity |
+| 4.3 -- state-point depth is TD; no storage interval designated | MEDIUM | Needs a designated storage interval and its temperature | Direction not established (original entry "Overstates capacity", superseded) |
 | 5.1 -- far-field dP vs near-well limit | HIGH | Evaluate fracture check at wellbore radius | Overstates rate ceiling 3.2x |
 | 5.2 -- depth and pressure inconsistent | HIGH | Tie CLI depth and pressure together | Overstates headroom 1.7x |
 | 6.3 -- Fertl-Wichmann above Squarci-Taffi | MEDIUM | Reverse the rank, or justify it | 3.8% on capacity at TRECATE |
 
-The directions do not agree: 3.1 understates capacity while 4.3 and 6.6
-overstate it, and the direction of 4.2 is not established. That is precisely why the combined assessment was deferred rather
+The directions do not agree: 3.1 understates capacity while 6.6 overstates it,
+and the directions of 4.2 and 4.3 are not established. That is precisely why the combined assessment was deferred rather
 than fixing them one at a time.
 
 The characterisation tests added in Phases 4, 5 and 6 pin the current behaviour
@@ -2194,7 +2243,7 @@ band, because none of them is represented as a sampled quantity:
 | 6.3 -- temperature method rank | 3.8% at TRECATE | **no** |
 | 3.1 -- E applied to net thickness | understates 1.4-10x | **no** |
 | 4.1 -- gauge vs absolute pressure (EOS input) | understates 0.09-0.57% (5 screened wells); up to 2.53% (corpus); 4.1% (synthetic 897 m case) | **no** |
-| 4.3 -- `z` is total depth | overstates, unquantified | **no** |
+| 4.3 -- state-point depth is TD (no storage interval designated) | unquantified, direction not established | **no** |
 
 Sampling more realisations reduces the width of the band around a number that
 may be systematically wrong by more than the band itself. A user who reads
