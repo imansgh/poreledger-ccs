@@ -3877,6 +3877,14 @@ print the same 96.6 kg/cm² at gauge depths 269 m apart, and the printed sub-sea
 values place the gauge-depth reference at 135 m, the rotary table, not the
 ground.
 
+*Added 2026-09-25:* a third anomaly is recorded, not resolved. In test 2
+(packer at 1142.0 m in open hole; recorder 1 at 1139.0 m) the interpreted
+"Pressione statica di giacimento 111 Kg/cmq a m 1139 (q.-1004) non stabil."
+is lower than the same recorder's last shut-in reading, 116.9 kg/cm² after a
+shut-in of 0.10, i.e. 10 minutes (the printout states "i tempi in
+ore,minuti"). The printout gives no explanation. The test's pressures
+remain non-stabilised and gas-bearing, and this conclusion is unchanged.
+
 **Conclusion:** the repository contains **no stabilised static water level and
 no stabilised water-bearing formation pressure** for any of the five wells. The
 evidence cannot distinguish water level at ground, at sea level, or at another
