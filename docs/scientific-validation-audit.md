@@ -1384,6 +1384,36 @@ contain pressure measurements (including ASTI|1 test pressures and DESANA|1
 wellhead pressures). No screened well has a stabilised water-bearing
 formation pressure (Remaining uncertainty item 5).
 
+*Evidence note, 2026-09-25 (documentation only; no parameter, test, baseline
+or status changed):* the 1020-1100 kg/m3 band is declared rather than cited;
+the literature review could not trace a hydrostatic gradient to a primary
+source (`docs/scenario-literature-review.md`, sections 3-4), so "the correct
+band" above is engineering judgment. The project holds one formation-water
+analysis for a screened well. DESANA|1 formation test 2 (11-12/4/1954),
+3059.12-3228.50 m RT, an interval that includes the model's TD, recovered
+"lt. 750 di acqua salata e fango"; the water sample is recorded as NaCl
+13.37 g/l, specific gravity 1.0130 at 15 C, pH 7.8, reddish. The same test
+also yielded a gas sample (methane 99.2%). Mud contamination is therefore not
+excluded, the interval is not shown to be purely water-bearing, and the
+reference water for the specific gravity is not stated. As an approximate
+conversion only (pure-water IAPWS density along the workbook's extrapolated
+temperature profile, 12-97 C, plus a constant salinity offset from the 15 C
+value), this sample corresponds to a column-average density to TD of about
+1004-1005 kg/m3, below the band. That is an estimate, not a measured column
+density, and it assumes the sampled water applies over the whole column and
+that the column is normally pressured; neither is established. Sensitivity
+only: with a point density of 1003.8 kg/m3 the DESANA|1 API P50 is 9.933 Mt,
+3.2% below a point density of 1060 kg/m3 (10.265 Mt) and 3.7% below the
+sampled band (10.311 Mt). No water analysis exists for SALUZZO|1, MALOSSA|15
+or TRECATE|9|ST, and none was identified for ASTI|1. The NaCl 11-12 g/l waters
+of MALOSSA 2, 4 and 8 come from overpressured intervals (Remaining uncertainty
+5 -- additional operator evidence) and do not calibrate a hydrostatic band;
+the shallow MALOSSA "B" water (1030 g/l, 1986) is from a non-screened well.
+The status of this finding is unchanged. Whether to keep the band or adopt a
+temperature- and salinity-dependent column density is an owner decision, and
+it is secondary to the normal-pressure and hydraulic-reference questions
+(Remaining uncertainty item 5; Finding 4.2 / 10.2).
+
 ### Finding 4.7 -- negative depth is accepted by the hydrostatic model
 
 **PASS WITH CAVEAT. Severity LOW.**
