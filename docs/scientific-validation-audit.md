@@ -3632,7 +3632,7 @@ Full inventory of module-level scientific constants in `src/`:
 | `CO2_OMEGA` | 0.225 | physical property | **no** | Phase 1, numerically |
 | `CO2_MW_KG_MOL` | 0.0440095 | physical property | **no** | Phase 1, numerically |
 | `CO2_Z_RA` | 0.2722 | physical property | **no** | Phase 1, numerically |
-| `DEFAULT_FRACTURE_GRADIENT_PA_M` | 15 000 | engineering | **no** | Phase 5, plausibility only |
+| `DEFAULT_FRACTURE_GRADIENT_PA_M` | 15 000 | engineering | **no** | Phase 4 (Finding 4.5), arithmetic only; value uncited |
 | `DEFAULT_SAFETY_FACTOR` | 0.9 | regulatory | **no** | not validated |
 | `RESERVOIR_DEPTH_FRACTION` | 0.85 | heuristic | **no** | not validated |
 | `DEPTH_CONFLICT_TOLERANCE_M` | 1.0 | heuristic | **no** | not validated |
@@ -3656,8 +3656,8 @@ hard-coded in a module escapes it entirely.
 
 `DEFAULT_SAFETY_FACTOR = 0.9` is the sharpest instance: it is described as "the
 fraction of the fracture pressure regulators typically allow" and names no
-regulator, no jurisdiction and no document, while being a direct multiplier on
-the injection-rate ceiling.
+regulator, no jurisdiction and no document, while multiplying the fracture pressure
+that sets the headroom, and so the injection-rate ceiling (Finding 4.5).
 
 ### Finding 9.9 -- the primary source is internally inconsistent about what E multiplies
 
@@ -3741,11 +3741,27 @@ the gaps are now enumerated.
    GeoCapacity 2% value, were not retrieved. The GeoCapacity 2% sits inside the
    adopted 1-4% range, so nothing turns on it.
 4. **The thirteen uncited constants were checked for plausibility, not
-   provenance.** Phase 5 found the fracture gradient defensible at 0.6631 psi/ft
+   provenance.** Phase 4 (Finding 4.5) confirmed the 0.6631 psi/ft conversion
+   but found no source for the value,
    and Phase 1 verified the CO2 constants numerically, but plausibility is not a
    source.
 5. **`DEFAULT_SAFETY_FACTOR = 0.9` remains unvalidated.** No regulator is named
-   and none was located. It multiplies the injection-rate ceiling directly.
+   and none was located. It multiplies fracture pressure, not headroom, so a
+   change in SF moves headroom and the rate ceiling more than proportionally
+   (Finding 4.5).
+
+*Wording revision, 2026-09-25 (documentation only; no status, severity,
+parameter or number changed):* four Phase 9 phrases were corrected to agree
+with Finding 4.5 and the code (`pressure.py:114-115`, `pressure.py:89`). As
+originally written: the constants table credited the fracture gradient to
+"Phase 5, plausibility only"; Finding 9.8 called the safety factor "a direct
+multiplier on the injection-rate ceiling"; item 4 read "Phase 5 found the
+fracture gradient defensible at 0.6631 psi/ft"; item 5 read "It multiplies the
+injection-rate ceiling directly." The fracture gradient was assessed in Phase 4
+(Finding 4.5), whose revision withdrew "defensible" as a general claim; the
+safety factor multiplies fracture pressure, and headroom and the rate ceiling
+respond more than proportionally (+11.1% SF gives +27.3% headroom at the CLI
+defaults, Finding 4.5).
 
 ---
 
