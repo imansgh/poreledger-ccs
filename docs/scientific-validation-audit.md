@@ -1279,12 +1279,23 @@ circulating.
 | SALUZZO\|1 | max 1400 (145-258 m); 1280-1320 to TD 1530.7 m | up to 13 729 Pa/m | 0.92x | none ("ASSORBIMENTI: NESSUNO") |
 | ASTI\|1 | max 1300 (616-821, 926-1135 m); 1280 to TD 1250 m | up to 12 749 Pa/m | 0.85x | none ("ASSORBIMENTI: NESSUNO") |
 | DESANA\|1 | 1520, from 2150 m to TD 3228.5 m | 14 906 Pa/m | 0.99x | none ("Assorbimenti: Nessuno") |
-| MALOSSA\|15 | 1800-2050 (4754-5421 m); 1910-1930 (5400-5500 m) | 17 652-20 104 Pa/m | up to 1.34x | 10 m3 (5227-5232 m) and 4 m3 (5269 m) at 2050; 49 m3 (5271-5290 m) at 2050; 9 m3 (5456-5500 m) at 1910-1930 |
+| MALOSSA\|15 | 1530-1590 (3800-4754 m); 1800-2050 (4754-5421 m); 1910-1930 (5400-5500 m) | 15 004-15 593 Pa/m (3800-4754 m); 17 652-20 104 Pa/m (4754-5500 m) | 1.00-1.04x; up to 1.34x | 10 m3 (5227-5232 m) and 4 m3 (5269 m) at 2050; 49 m3 (5271-5290 m) at 2050; 9 m3 (5456-5500 m) at 1910-1930; 146 m3 while fishing and reaming (see below) |
 | TRECATE\|9\|ST | no record | - | - | - |
 
 Losses of 70 m3 (circulation) and 60 m3 (displacement) while running 13 3/8"
 casing, bottom hole at 2499 m; the 0-2500 m section was drilled at
 1100-1120 g/l. The loss location within the open hole is not stated.
+
+*Completeness note, 2026-09-25:* MALOSSA|15 also records losses outside
+normal drilling: 55 m3 while fishing (bottom hole 5383 m, bit at 5282 m),
+75 m3 while fishing (bottom hole 5421 m) and 16 m3 while reaming (bottom hole
+5401 m), 146 m3 in total. The log states neither the mud density nor the hole
+section for these entries. With the 72 m3 lost while drilling and after the
+sidetracks, 218 m3 were lost below the 9 5/8" shoe at 4751 m. No loss entry
+lies between the 2499 m casing-run loss and 5227 m, an interval that includes
+the 1530-1590 g/l section (3800-4754 m). The 3800-4754 m mud interval and
+these losses were added to the table for completeness; no interpretation in
+this finding changed.
 
 **What the drilling records support, and what they do not.**
 
