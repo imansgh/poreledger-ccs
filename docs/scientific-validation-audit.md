@@ -1318,6 +1318,24 @@ this finding changed.
 - No screened well has a leak-off or fracture test, the only records that would
   measure the gradient directly.
 
+*Dependency note, 2026-09-25:* a non-screened well in the project, MALOSSA 4,
+records an injectivity test before acidising at 5972-6002 m ("prova di
+assorbimento per acidificazione"): "Pressione di rottura atm 638", pumping
+pressures 500-640 atm, residual 487 atm. The log does not state where the
+pressure was measured. Read as surface pressure plus a fresh-water column it
+corresponds to about 20.2-20.6 kPa/m at depth; read as bottom-hole pressure,
+to about 10.5-10.8 kPa/m. The bottom-hole reading lies below the measured
+Malossa-field pore-pressure evidence (Remaining uncertainty 5 -- additional
+operator evidence), so the surface reading is the more plausible one, but it
+remains an inference. This is the first breakdown-type record found in the
+project. It is not a confirmed fracture gradient, and because MALOSSA 4 is not
+a screened well it does not establish a fracture gradient for any of the five
+screened wells. Heavy losses on 2.0-2.1 SG mud in MALOSSA 9, 11 and 13
+(including 356 m3 with total loss at 5264 m in MALOSSA 13) are consistent with
+a narrow margin between pore pressure and loss pressure; they are not
+fracture-gradient measurements. The 15 000 Pa/m default, the severity and the
+status of this finding are unchanged.
+
 **Dependencies (not resolved here).**
 
 - Finding 4.1: the gradient's gauge/absolute convention is undocumented, so the
@@ -1756,6 +1774,103 @@ to rho_eq*g*z for sensitivity (the shipped CLI does not do this; Finding 5.2).
 - **Whether an injection window exists at MALOSSA|15 is unresolved if the
   high-pressure analogue applies.** Neither its absence nor its presence is
   established.
+
+#### Remaining uncertainty 5 -- additional operator evidence
+
+*Dated addendum, 2026-09-25. Documentation revision; read-only audit. No
+equation, parameter, test, baseline or source changed. Nothing below is a
+model correction. RU5 and its evidence review above remain frozen as
+committed (6945a09); this addendum does not edit them. Every Malossa-field
+pressure below is analogue evidence for MALOSSA|15, not a MALOSSA|15
+measurement.*
+
+The evidence review above listed as not read: the test blocks of ASTI 2 and
+DESANA 3, and MALOSSA 2-5 and 7-14. These 14 composite logs (`data/PDF/`;
+there is no MALOSSA 6 file in the project) have now been read. Conventions
+are those of the evidence review: model hydrostatic pressure = 1060*g*z with
+z = rotary-table (RT) depth minus RT height; values printed in "atm" are
+bracketed between kg/cm2 and the physical atmosphere; gauge depths are taken
+as RT-referenced, following the AGIP convention, which was not verified on
+every log. Distances to MALOSSA|15 are from `pozzi-storici.csv` coordinates
+on a common datum.
+
+**A-1. Water-bearing intervals, Malossa field (evidence).**
+
+| Well, test | Interval, fluid | Recorded | Gradient below ground | Observed / model midpoint |
+| --- | --- | --- | --- | --- |
+| MALOSSA 8 PT 2a (28.6-10.7.1976) | 5532-5556 m; 1 157 350 l brackish water in 172 h 43' (D 1014; NaCl 12.27 g/l) | SBHP 1041.2 kg/cm2 (Amerada at 5544 m) after 88 h 10' build-up | 18.45 kPa/m | 1.78 |
+| MALOSSA 8 cased-hole test 2a (18.6.1976) | 5532-5556 m; brackish water (NaCl 10.98 g/l), traces of gas | SBHP 1052.5 kg/cm2 after 300 min shut-in; gauge depth not printed | 18.69 kPa/m | 1.80 |
+| MALOSSA 2 PT 1a (14.12.1974) | 6361-6471 m open hole; salt water at 750 m3/d (NaCl 11 g/l) | SBHP 1109.40 atm (1120 atm extrapolated to 6471 m); shut-in tubing-head pressure 472 atm on the water column | 17.1-17.7 kPa/m | 1.65-1.70 |
+| MALOSSA 4 PT 2a (17-19.11.1975) | 5972-6197 m open hole; brackish water, 37 350 l (NaCl 10.96 g/l) | SBHP 1064 atm (Amerada at 6174 m) after 16 h build-up | 16.9-17.5 kPa/m | 1.63-1.68 |
+
+- MALOSSA 2's operator notes state that the dolomite series from 6070 to
+  6471 m is "completamente invasa da acqua salata", and that no gas-water
+  contact was found. A second salt-water test (PT 2a, 6100-6145 m, 943 m3/d)
+  recorded a shut-in tubing-head pressure of 481.8 atm; no bottom-hole
+  pressure is given.
+- The interval of MALOSSA 4 PT 2a was acidised about five weeks before the
+  test (9.10.1975). The recovered volume exceeds the unreturned treatment
+  volume, but contamination is not excluded.
+- Classification: **CONFIRMED** -- measured, stabilised or near-stabilised
+  pressures from water-bearing intervals exist in the project for three
+  non-screened Malossa-field wells (MALOSSA 2, 4 and 8).
+
+**A-2. Hydrocarbon-zone intervals, Malossa field (evidence).**
+
+| Well | Record | Observed / model midpoint |
+| --- | --- | --- |
+| MALOSSA 9 (0.47 km from MALOSSA\|15; 1977) | SBHP 1035.3 kg/cm2 (Amerada at 5396 m) after 955 min build-up; full static pressure profile | 1.81 |
+| MALOSSA 10 (1977) | 26 h static profile, 1043.3 kg/cm2 at 5830 m; cores at 5535.5-5564.5 m described as "F.ne Zandobbio" | 1.69 |
+| MALOSSA 7 (1976) | SBHP 1045.9 kg/cm2 at 5700 m | 1.73 |
+| MALOSSA 3 (1974) | Production test SBHP 1085 and 1079.5 kg/cm2 at 6075 m; DST 1a extrapolated SBHP 1000 atm, operator: "gradiente = 1,98" | 1.68; 1.86-1.92 |
+| MALOSSA 4 (1976) | SBHP 1036 and 1035 kg/cm2 at 5650 and 5620 m | 1.74 |
+| MALOSSA 2 (1975) | SBHP 1068.8-1074 atm at 5955-5975 m (Dolomia Principale) | 1.69-1.75 |
+
+- MALOSSA 11, 12, 13 and 14 record wellhead pressures only. They are not
+  formation-pressure calibration.
+- Vacuum tests in MALOSSA 2, 3, 12, 13 and 14 are liner-integrity checks;
+  their pressures are wellbore readings, not formation pressures.
+- Across these wells, dated 1973-78, the recorded bottom-hole pressures fall
+  in a narrow band of about 101.5-108.5 MPa at about 5.4-6.4 km. This does not
+  show that MALOSSA|15 has the same pressure.
+
+**A-3. ASTI 2, DESANA 3 and MALOSSA 5 (nothing calibratable).**
+
+| Well | Record | Assessment |
+| --- | --- | --- |
+| ASTI 2 (corpus well) | 9 tests. Test 1, 1720-1750 m, salt water: "Pressione statica di giacimento NON RILEVATA"; last shut-in reading 166.6 kg/cm2 after 10 min, still rising (0.92x). Test 7, gas: "93,8 Kg/cmq a 984 m ... non stab." (0.90x). Remaining tests failed on packer seal or were dry | No calibratable pressure |
+| DESANA 3 (corpus well) | 7 tests (1954), all gas or dry; bottom-hole pressures 140-182 atm, flowing or not stabilised, gauge depth not stated | Not usable |
+| MALOSSA 5 | TD 2506 m, suspended, no tests | No evidence |
+
+**A-4. What the additional evidence strengthens.**
+
+- Pressure evidence for the Malossa field is no longer limited to MALOSSA 1.
+- Abnormally high pressure is recorded in the water-bearing intervals of
+  MALOSSA 2, 4 and 8, not only in hydrocarbon zones.
+- Hydrocarbon-zone pressures in several nearby wells, including MALOSSA 9 at
+  0.47 km, agree with the MALOSSA 1 analogue (E-4 above).
+- Long build-ups are recorded (88 h 10' at MALOSSA 8; 955 min at MALOSSA 9;
+  a 26 h static profile at MALOSSA 10), and most records print kg/cm2
+  explicitly.
+- The unit question is better informed: "F.ne Zandobbio", the unit
+  MALOSSA|15 produced from, is described in MALOSSA 10 cores.
+
+**A-5. What remains unresolved for MALOSSA|15.**
+
+The transfer limitations listed in item 5 still apply. None of the following
+is established:
+
+- pressure communication between MALOSSA|15 and any of these wells;
+- depletion or other history effects between 1973-78 and MALOSSA|15's
+  drilling in 1978-79;
+- the exact unit correlation to MALOSSA|15;
+- the gauge-depth convention on every log;
+- the "atm" convention where "atm" is printed;
+- whether the records represent the same hydraulic state.
+
+The evidence base is substantially stronger; a MALOSSA|15-specific
+calibration remains unavailable. No pressure is transferred to MALOSSA|15,
+and whether and how to do so remains an owner methodology decision.
 
 ---
 
