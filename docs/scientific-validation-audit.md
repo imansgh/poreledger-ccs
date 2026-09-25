@@ -1348,6 +1348,13 @@ entirely, and the provenance rationale says exactly that: "Normally-pressured
 hydrostatic assumption. No measured pressure exists in any source, so this is
 untested for this well."
 
+*Scope note, 2026-09-25:* the quoted rationale is code text. Its "no
+measured pressure ... in any source" holds for the structured sources that
+ingestion reads. It does not hold for the project's operator records, which
+contain pressure measurements (including ASTI|1 test pressures and DESANA|1
+wellhead pressures). No screened well has a stabilised water-bearing
+formation pressure (Remaining uncertainty item 5).
+
 ### Finding 4.7 -- negative depth is accepted by the hydrostatic model
 
 **PASS WITH CAVEAT. Severity LOW.**
@@ -1483,10 +1490,261 @@ datum-error reading). That must not be rediscovered there as though it were new.
    judgment, and the MALOSSA|15 drilling record does not support it as a
    well-specific value (*Finding 4.5 revision*). Phase 9 should decide whether
    it needs a citation.
-5. **The normal-pressure assumption is untested.** No measured formation
-   pressure exists anywhere in the dataset, so nothing in this repository can
-   detect an over- or under-pressured reservoir. This is the largest uncertainty
-   in the pressure model and it is not reducible with the available data.
+5. **The normal-pressure assumption is not calibrated for any screened well.**
+   *(Original item: "The normal-pressure assumption is untested. No measured
+   formation pressure exists anywhere in the dataset, so nothing in this
+   repository can detect an over- or under-pressured reservoir. This is the
+   largest uncertainty in the pressure model and it is not reducible with the
+   available data." Superseded 2026-09-25; the evidence is in* Remaining
+   uncertainty 5 -- evidence review *below.)*
+
+   **REVIEW REQUIRED. Severity not assigned.** Documentation revision. No
+   equation, parameter, test or baseline changed.
+
+   The original sentence mixed three different scopes. They have different
+   answers:
+
+   - **Structured sources used by ingestion.** The three GEOTHOPICA sheets,
+     `pozzi-storici.csv` and `po_wells_clean.csv` contain no pressure field.
+     Ingestion never populates `pressure_pa` (`records.py:163-165`), and
+     `REQUIRED_SOURCES["pressure_pa"]` is `None` (`completeness.py:25`), so a
+     measured pressure could not enter the pipeline even if a source held one.
+     The model `P = rho*g*z` has no term for over- or under-pressure. Within
+     the pipeline the assumption is therefore untestable.
+   - **The five screened wells.** No stabilised formation pressure from a
+     water-bearing interval was established for any of them (*Finding 4.2 /
+     10.2 revision*, section 4):
+     - SALUZZO|1: no pressure test of any kind. Mud and no-loss evidence only.
+     - ASTI|1: formation- and production-test pressures exist, but each is
+       non-stabilised, from a gas-bearing or mixed interval, or from a test the
+       operator rated unsatisfactory or uninterpretable. None can calibrate a
+       water-bearing state-point pressure.
+     - DESANA|1: wellhead and production-test pressures exist for the Tortonian
+       gas interval (2406-2465.50 m RT). They are not a direct formation
+       pressure at the state point (TD, `depth_m` 3224.9 m). The only water
+       test near that depth recorded no pressure.
+     - MALOSSA|15: no formation-pressure measurement was found. Its heavy-mud
+       and loss record is inferential only.
+     - TRECATE|9|ST: no operator record in the project.
+   - **Broader project source records.** The operator composite logs in
+     `data/PDF/` do contain pressure-related measurements and observations,
+     including for wells outside the ingested corpus. Their existence does not
+     make any screened well's state-point pressure known.
+
+   **MALOSSA|15 -- analogue evidence, not a correction.** MALOSSA 1 is in the
+   same MALOSSA field, about 1.2 km from MALOSSA|15, and is not in the
+   ingested corpus. Its record contains a kick at 5240 m (shut-in drill-pipe
+   pressure about 5800 psi on 1240 g/l mud) and two drill-stem-test build-ups
+   of 1045.8 and 1050.6 "atm" below a packer at about 5450 m. Both imply a
+   pressure about 1.8-1.9x the model's hydrostatic pressure at that depth. This
+   is analogue evidence of abnormally high pressure in the field. It is not a
+   measurement of MALOSSA|15, and it is not transferred here:
+
+   - MALOSSA 1 is a different well;
+   - pressure communication between the two is not established;
+   - the MALOSSA 1 tests date from 1973 and MALOSSA|15 was drilled in 1978-79,
+     so depletion or other history effects are possible;
+   - the unit correlation is unresolved: MALOSSA 1 tested "Corna" dolomite,
+     MALOSSA|15 produced from "F.ne ZANDOBBIO", and the workbook's deepest
+     MALOSSA|15 unit is "MAIOLICA,ROSSO AMMONITICO";
+   - the drill-stem-test gauge depth is not printed;
+   - the meaning and convention of "atm" are not stated;
+   - drill-stem-test stabilisation is not stated.
+
+   Whether and how to transfer it is an owner methodology decision.
+   MALOSSA|15's own 1.8-2.05 SG mud and its losses are *consistent with* a
+   high-pressure interpretation. Mud weight is not pore pressure, and losses
+   are not a fracture-gradient measurement.
+
+   **Ranking.** "Largest uncertainty in the pressure model" is not established
+   as a corpus-wide ranking. For MALOSSA|15 the analogue evidence makes the
+   assumption particularly important. For SALUZZO|1, ASTI|1 and DESANA|1 the
+   records give only loose bounds and show no indication of abnormal pressure.
+   For TRECATE|9|ST there is no evidence either way. This uncertainty and
+   Finding 4.2's hydraulic reference are the same unknown, the formation head
+   at the state point. They are not independent terms, and their effects must
+   not be multiplied.
+
+   **Reducibility.** Analogue records and drilling bounds reduce the
+   uncertainty. They cannot calibrate any screened well's state-point pressure
+   without an explicit, owner-approved transfer methodology. Per-well
+   calibration still needs the minimum evidence listed in *Finding 4.2 / 10.2
+   revision*, section 5.
+
+   **Dependencies (not resolved here).**
+   - Finding 4.2 / 10.2: the same formation-head question.
+   - Finding 4.5: a fracture gradient is meaningful only relative to the actual
+     formation pressure. Under the MALOSSA analogue the 15 000 Pa/m default
+     would sit below pore pressure.
+   - Finding 11.1 and Phase 1: pressure drives the CO2 density. Pressures near
+     100 MPa lie far outside the validated 1-35 MPa envelope.
+   - Findings 5.1 / 5.2: the API derives pressure from depth, while the CLI
+     uses the midpoint of its pressure prior. The two paths use different
+     pressure sources.
+
+#### Remaining uncertainty 5 -- evidence review
+
+*Documentation revision, 2026-09-25. Read-only audit. No equation, parameter,
+test, baseline or source changed. Nothing below is a model correction.*
+
+Conventions:
+- Pressures are read visually from scanned composite logs (no text layer).
+- Printed values are taken as gauge: gauge or absolute is not stated in the
+  records. The ASTI 1 and MALOSSA B printouts compute "Press. idrostatica" as
+  rho*z/10 with no atmosphere term, which is weak evidence for gauge.
+- "atm" is bracketed between kg/cm2 (98 066.5 Pa) and the physical
+  atmosphere (101 325 Pa), a 3.3% span.
+- Model depth `z` is depth below ground: operator rotary-table (RT) depth
+  minus RT height (*Finding 4.2 / 10.2 revision*, section 1).
+- Model hydrostatic pressure = rho*g*z with rho = 1020 / 1060 / 1100 kg/m3.
+
+**E-1. Screened wells -- observed records (evidence).**
+
+| Well | Record | Observed | Model at same depth (1020 / 1060 / 1100) | Observed / midpoint | Usable for calibration? |
+| --- | --- | --- | --- | --- | --- |
+| SALUZZO\|1 | All tests "NESSUNA/NESSUNO"; mud 1200-1400 g/l, 1280-1320 near TD 1530.7 m RT; no losses | no pressure | -- | -- | No |
+| ASTI\|1 | FT2, open hole 1142-1186 m RT; gas with traces of salt water; gauge 1139 m RT | 111 kg/cm2 "non stabil." (10.89 MPa); last shut-in 116.9 after 10 min (11.46 MPa) | 11.36 / 11.81 / 12.25 MPa | 0.92 / 0.97 | No |
+| ASTI\|1 | FT3 (88 @ 1129), FT6 (64.5 @ 861), FT7 (96.6 @ 1130), PT1 (95 @ 1167) | 6.33-9.47 MPa | -- | 0.71-0.81 | No: non-stabilised, gas, or uninterpretable |
+| ASTI\|1 | FT9, commingled 870.5-1169 m, gauge 861 m, "INSODDISFACENTE" | 96.6 kg/cm2 | -- | 1.06 | No |
+| DESANA\|1 | Production test 1, 27/4/1954, gas, 2406-2465.50 m RT | wellhead shut-in 223 atm (21.87-22.60 MPa) | -- | -- | No: wellhead pressure, gas interval, not the state point |
+| DESANA\|1 | Production tests 1955 / 1957; tubing 1955-1961 | shut-in 155 / 148 atm; tubing 197 to 73 atm | -- | -- | No: after production began |
+| MALOSSA\|15 | Formation tests (open hole and cased), production tests, vacuum test: "Nessuna/o" | no pressure | -- | -- | No |
+| TRECATE\|9\|ST | No operator record in the project | -- | -- | -- | No |
+
+The ASTI|1 FT2 interpretation (111) is lower than its own last recorded
+shut-in reading (116.9). This is recorded, not resolved.
+
+**E-2. Screened wells -- engineering inference (not measurement).**
+
+| Well | Basis | Result |
+| --- | --- | --- |
+| SALUZZO\|1 | No kick with 1280 g/l mud to TD | Pore pressure at most 19.2 MPa at TD (at most 1.21x the model midpoint). Upper bound only. |
+| ASTI\|1 | No kick with 1280 g/l mud; FT2 last shut-in reading | Gas interval at 1139 m RT: between 0.97x and 1.21x the model midpoint, if the gauge is valid. Not the TD state point. |
+| DESANA\|1 | 223 atm converted to bottom-hole pressure through a static gas column (1954 gas analysis; workbook temperature profile) | 25.7-27.3 MPa at mid-perforation, 1.02-1.08x the model midpoint (0.98-1.12x across the model band). Gas interval, not the state point. |
+| DESANA\|1 | No kick with 1520 g/l mud to TD | At most 1.44x the model midpoint at TD. Upper bound only. |
+
+**E-3. MALOSSA|15 -- mud and losses (observation, inference only).**
+
+- Mud densities 1800-2050 g/l from 4754 m (below the 9 5/8" shoe at 4751 m)
+  and 1930-1910 g/l at 5400-5500 m give static gradients of 17 652-20 104 Pa/m,
+  1.70-1.93x the model midpoint hydrostatic gradient
+  (1060 kg/m3 x g = 10 395 Pa/m). 1530-1590 g/l was carried at 3800-4754 m.
+- Losses at 5227-5500 m: 10 + 4 + 49 + 9 m3 while drilling and after the
+  sidetracks, 55 + 75 m3 while fishing, 16 m3 while reaming. Separately,
+  70 + 60 m3 were lost while running the 13 3/8" casing at 2499 m on
+  1100-1120 g/l mud.
+- No-kick inference: at most 103.0-104.1 MPa at TD, against a model
+  pressure of 54.93 / 57.08 / 59.23 MPa. This is an upper bound. The record
+  gives no lower bound.
+
+**E-4. MALOSSA 1 -- analogue evidence (not a measurement of MALOSSA|15).**
+
+Source: `data/PDF/malossa_001.pdf`. RT 119.00 m, ground 112.00 m, TD 5545.50 m,
+drilled 26-7-1972 to 16-1-1973. About 1.21 km from MALOSSA|15, using
+`pozzi-storici.csv` coordinates on the same datum.
+
+| Record | Observed | Derived | Observed / model midpoint |
+| --- | --- | --- | --- |
+| Kick at 5240 m RT on 1240 g/l mud; mud then raised to 2100 g/l | shut-in drill-pipe 5800 psi, shut-in casing 5600 psi, both after 30 min | 63.72 + 39.99 = 103.7 MPa (102.3 using the casing pressure); 19.8 kPa/m | 1.91 |
+| Drill-stem test 1a, 17-18/1/1973, open hole 5510-5545.50 m, packer 5452 m; gas with condensate | build-up 1045.8 "atm" after 1146 min shut-in; final flow 1035 | 102.6-106.0 MPa | 1.78-1.87 |
+| Drill-stem test 2a, 22-23/1/1973, packer 5450 m | build-up 1050.6 "atm" after 392 min shut-in; final flow 1038.5 | 103.0-106.5 MPa | 1.79-1.88 |
+| Production test, 21-23/12/1973 | shut-in tubing-head 799 kg/cm2 "stabilizzata dopo 1'"; bottom-hole gauges not recorded (lubricator fault) | 78.4 MPa at the wellhead; consistent with the drill-stem tests for a column of about 450-520 kg/m3 | -- |
+
+Across the gauge-depth bracket (5450-5545.5 m RT) and the unit bracket, the
+drill-stem-test gradient is 18.5-19.6 kPa/m below ground. That is
+1.72-1.96x the model band and 1.78-1.88x its midpoint. The records are
+internally consistent:
+- the drill-stem-test pressures lie below the 2000-2100 g/l mud column
+  (108.1-112.3 MPa);
+- 446 m3 of losses were recorded at 5240-5519 m;
+- the operator notes "alte pressioni rilevate a testa pozzo".
+
+The transfer limitations are listed in item 5 above.
+
+**E-5. Other project records (context; none calibrates a screened well).**
+
+| Well | Record | Assessment |
+| --- | --- | --- |
+| MALOSSA "B" (1986), cased interval 970-1100 m RT; gauge 936 m; salt water 1030 g/l produced from the formation | 101.5 kg/cm2 at two shut-ins (26 and 6 min); 101.9 after 6 h following injection | Near-stabilised (the operator does not say so), water-bearing, shallow unit: 10 703 Pa/m below ground, inside the model band (9.30-10.03 MPa at 930 m). A sea-level reference would give 8.08-8.72 MPa. Analogue only. |
+| MALOSSA "A" (1983), injection interval 1117-1315 m RT | static bottom-hole 116 / 115.94 kg/cm2 at 1074-1076 m RT, each 15 h after injection | Near-static fall-off; formation fluid not identified. 10 680 Pa/m, inside the model band. Analogue only. |
+| DESANA 2 (corpus well), test 1954, 2496.50-2522.00 m, salt water | flowing 355 then 380 atm | Internally inconsistent: 355 equals the 1420 g/l mud column (354.5 kg/cm2), and 380 exceeds it with no kick or losses recorded. Not used. |
+| SALUZZO 2 (corpus well), test 2, 1957, salt water, leaking packer | flowing 77 then 98 | Unusable. |
+
+Not read in this review: the test blocks of ASTI 2 and DESANA 3 (both corpus
+wells), MALOSSA 2-5 and 7-14, the rest of `data/PDF/`, and external
+literature.
+
+**E-6. Sensitivity evidence (not a correction, not a pressure estimate).**
+
+*S-1. Pressure uncertainty already carried by the API.* The only pressure
+uncertainty sampled is the brine-density band (1020-1100 kg/m3). It spreads
+CO2 density (Peng-Robinson, low to high end) as follows:
+
+| SALUZZO\|1 | ASTI\|1 | DESANA\|1 | MALOSSA\|15 | TRECATE\|9\|ST |
+| --- | --- | --- | --- | --- |
+| +3.95% | +6.03% | +4.54% | +4.10% | +4.51% |
+
+Nothing in the API represents abnormal pressure.
+
+*S-2. Generic pressure multiplier.* The factor `k` scales the brine-density
+band. It is **not an evidence-based pressure estimate**. Change in API P50
+(production code; A = 8e7 m2, h = 35 m, 2000 samples, seed 42):
+
+| k | SALUZZO\|1 | ASTI\|1 | DESANA\|1 | MALOSSA\|15 | TRECATE\|9\|ST |
+| --- | --- | --- | --- | --- | --- |
+| 0.75 | -18.1% | -34.1% | -18.0% | -15.7% | -17.0% |
+| 0.90 | -5.8% | -9.0% | -6.3% | -5.7% | -6.2% |
+| 1.25 | +10.3% | +14.6% | +12.6% | +11.7% | +12.9% |
+| 1.80 | +24.6% | +32.6% | +31.1% | +29.3% | +33.0% |
+
+*S-3. CO2 density against equivalent gradient.* Change relative to the
+model midpoint, Peng-Robinson / Span-Wagner. The equivalent density
+rho_eq sets pressure as rho_eq*g*z.
+
+| rho_eq (kg/m3) | SALUZZO\|1 | ASTI\|1 | DESANA\|1 | MALOSSA\|15 | TRECATE\|9\|ST |
+| --- | --- | --- | --- | --- | --- |
+| 1000 | -3.1 / -2.2% | -4.8 / -3.7% | -3.5 / -2.7% | -3.1 / -2.5% | -3.4 / -2.8% |
+| 1200 | +6.0 / +4.1% | +8.6 / +6.2% | +7.1 / +5.4% | +6.5 / +5.0% | +7.2 / +5.7% |
+| 1800 | +22.7 / +14.9% | +30.1 / +20.2% | +28.4 / +20.7% | +26.7 / +20.0% | +29.9 / +22.9% |
+
+*S-4. MALOSSA|15 under the MALOSSA 1 bracket (102.6-106.5 MPa at
+z = 5491 m, T = 416.15 K) -- conditional on a transfer decision not
+taken.*
+
+- CO2 density:
+  - Peng-Robinson: 1038-1052 kg/m3, against 802 at the model midpoint
+    (+29% to +31%).
+  - Span-Wagner: 911-920 kg/m3, against 746.5 (+22.0% to +23.3%).
+- API P50: 11.200 to 14.538 Mt (+29.8%). This uses Peng-Robinson far
+  outside its 1-35 MPa validation envelope. Its departure from Span-Wagner
+  is +13.9% to +14.3% at the analogue pressure, against +7.4% at the model
+  pressure (Finding 11.1).
+
+*S-5. CLI headroom.* Default G_f = 15 000 Pa/m and SF = 0.9, with P_init set
+to rho_eq*g*z for sensitivity (the shipped CLI does not do this; Finding 5.2).
+
+- Headroom at the model midpoint:
+
+  | SALUZZO\|1 | ASTI\|1 | DESANA\|1 | MALOSSA\|15 | TRECATE\|9\|ST |
+  | --- | --- | --- | --- | --- |
+  | 4.74 MPa | 3.87 MPa | 10.01 MPa | 17.05 MPa | 18.90 MPa |
+
+- Relative to that midpoint, raising rho_eq changes headroom by -13%
+  (1100), -44% (1200) and -76% (1300).
+- The elasticity of headroom to P_init is -3.35. The Theis rate ceiling is
+  linear in headroom: +10% P_init at MALOSSA|15 gives -33.5% on the rate.
+- At the defaults the window closes for any well once P_init/z reaches
+  13 500 Pa/m (rho_eq at least 1376.6 kg/m3, 1.30x the midpoint).
+- Under the MALOSSA 1 bracket the CLI would return zero headroom. That
+  result is an artefact: the 15 000 Pa/m default lies below the analogue
+  pore-pressure gradient (18.5-19.6 kPa/m), which cannot hold for a real
+  fracture gradient (Finding 4.5).
+- Using MALOSSA|15's heavy-mud gradients with losses (19 417-20 104 Pa/m) as
+  a stand-in (these are not fracture gradients): SF 0.9 gives 0 MPa and
+  SF 1.0 gives 0.17-7.83 MPa.
+- **Whether an injection window exists at MALOSSA|15 is unresolved if the
+  high-pressure analogue applies.** Neither its absence nor its presence is
+  established.
 
 ---
 
