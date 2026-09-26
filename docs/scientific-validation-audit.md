@@ -4899,7 +4899,7 @@ since all three concern the same composition.
 
 **Not verified:**
 
-- Any hydraulic head. Measured formation-test and wellhead pressures exist in
+- Any hydraulic head for the five screened wells. Measured formation-test and wellhead pressures exist in
   the DESANA|1 and ASTI|1 composite logs, but none is a stabilised pressure or
   static water level from a water-bearing interval, so no hydraulic reference
   was established (*Finding 4.2 / 10.2 revision*). The structured sources
