@@ -1014,8 +1014,14 @@ depth where no storage occurs.
 
 No designated storage interval or state-point depth exists in the current
 model. The ingested stratigraphic intervals do carry tops and bottoms, but they
-record chronostratigraphic units (by age; no formation name for the five
-screened wells) and are not designated as the CO2 storage interval.
+are ingested with lithology and age only (`normalize.py:224-225`) and are not
+designated as the CO2 storage interval. The workbook's `nomeunita1` column,
+which the pipeline does not read, names units for MALOSSA|15 (all 7 rows;
+deepest 5136-5491 m "MAIOLICA,ROSSO AMMONITICO", `rango` "FORMAZIONE") and
+for one TRECATE|9|ST row (1963-3927 m, "GALLARE"); it is blank for SALUZZO|1,
+ASTI|1 and DESANA|1. *(Corrected 2026-09-26; originally "record
+chronostratigraphic units (by age; no formation name for the five screened
+wells)".)*
 `thickness_m` is a net thickness with no associated top depth, so even a
 midpoint cannot be constructed -- `top + h/2` has no `top`. Note that the
 temperature path does better: `RESERVOIR_DEPTH_FRACTION = 0.85` at least
