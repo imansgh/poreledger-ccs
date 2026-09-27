@@ -4673,6 +4673,8 @@ remains a data-quality defect worth fixing, but it is not a numerical problem.
 
 ### Finding 12.4 -- the combined net effect
 
+*Status 2026-09-27: OPEN — methodology decision required; the combined factor is a conditional scenario product, not an estimate of true/reported; any pressure-state term must be a single joint scenario (RU5).*
+
 **This is the result the baseline freeze existed to produce.**
 
 Convention: **factor = true / reported**. A factor above 1 means the tool
@@ -4849,6 +4851,11 @@ Severity counts across all twelve phases:
 | MEDIUM / MEDIUM-HIGH | 11 |
 | LOW | 4 |
 
+*Note 2026-09-27:* the counts above, and "the 20 open findings" below, are as
+of 2026-09-20 and were not re-derived after subsequent status revisions. Since
+then Finding 4.5 is REVIEW REQUIRED with severity under review, and Finding
+12.4 is explicitly OPEN (methodology decision required).
+
 The five HIGH findings:
 
 | # | Finding | Effect | Scope |
@@ -4870,6 +4877,7 @@ contains three of them.
 2. **Disclose Finding 12.5.** One sentence in the API payload stating that the
    band covers two literature ranges and excludes systematic bias. Costs
    nothing, prevents the most likely misreading.
+   *(Implemented 2026-09-23 in `9a28c0c`; Finding 12.5's status is unchanged.)*
 3. **Establish the hydraulic reference (Finding 4.2 / 10.2).** The depth
    datum is now supported for four wells: the workbook depths are below ground.
    Subtracting `quota` would not remove a datum error. It would move the assumed
@@ -4928,3 +4936,15 @@ than invent them.
 disclosure-only edits recorded under **Baseline freeze**, none of which altered a
 scientific number. Every frozen finding is pinned by a characterisation test
 naming it and stating what that test must assert once the finding is resolved.
+
+*Post-baseline reconciliation note, 2026-09-27 (the historical baseline above is
+not rewritten):* later commits changed `src/` after that baseline:
+
+- `db3e4ec`: `surrogate.py` R² edge-case fix plus web scenario-name resolution;
+  this includes a small behaviour change in the constant-response R² edge case.
+- `9a28c0c`: disclosure-only additions to the API, CLI, report and schemas.
+- `19752cb`: rationale-text correction only; no numerical or model behaviour
+  change.
+
+The test count at HEAD `d8b7e93` is 1132 passing, not the 986 stated under
+*What this audit verified*.

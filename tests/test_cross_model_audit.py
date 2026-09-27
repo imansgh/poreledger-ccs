@@ -170,7 +170,7 @@ def test_temperature_pressure_depth_gap_costs_under_two_percent(
 
 
 def combined_factor(depth_m, temperature_k, elevation_m, net_to_gross):
-    """true / reported, combining findings 3.1, 4.1, 4.2 and 11.1."""
+    """Conditional scenario product (sea-level water level) of findings 3.1, 4.1 and 4.2; 11.1 is not included; not an estimate of true / reported (Finding 12.4 is OPEN)."""
     gauge = BRINE_DENSITY * GRAVITY * depth_m
     corrected = BRINE_DENSITY * GRAVITY * (depth_m - elevation_m)
 
