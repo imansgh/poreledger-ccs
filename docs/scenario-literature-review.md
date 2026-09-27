@@ -134,8 +134,14 @@ The scenario declares a brine-density range; pressure is then **derived per well
 from source-derived depth**. Provenance records it as derived, naming both the
 source depth and the scenario gradient. This is classified **generic**: it is
 the normally-pressured hydrostatic assumption, and it is wrong for any
-over- or under-pressured reservoir. Nothing in the dataset tests that
-assumption, because no measured pressure exists.
+over- or under-pressured reservoir. The structured ingestion sources contain no
+pressure data, so nothing in them tests that assumption. Project operator
+records do contain measured pressures, but none is a stabilised water-bearing
+pressure for the five screened wells; pressures from non-screened wells are
+analogue evidence only and are not transferred to any screened well
+(`docs/scientific-validation-audit.md`, Remaining uncertainty item 5).
+*(Scope corrected 2026-09-27; originally "Nothing in the dataset tests that
+assumption, because no measured pressure exists.")*
 
 ### thickness_m (net storage thickness) - NOT adopted from literature
 
@@ -247,8 +253,8 @@ Net thickness therefore remains an explicit user input, and
    measurement.
 4. **The porosity range is broad** (10-35%): the low and high ends differ by
    3.5x in capacity, and nothing selects between them for a given well.
-5. **Hydrostatic pressure is assumed**, untested by any measurement in the
-   dataset, and wrong for any over-pressured reservoir.
+5. **Hydrostatic pressure is assumed**, untested by any calibrating measurement
+   for the five screened wells, and wrong for any over-pressured reservoir.
 6. **Method-mixing risk.** The adopted efficiency and the adopted porosity come
    from a basin-scale methodology; the pilot applies them at a well. That
    mismatch is recorded here and in the scenario metadata, and is not resolved.

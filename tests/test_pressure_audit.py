@@ -168,11 +168,11 @@ def test_datum_correction_subtracts_the_elevation():
 
 
 def test_hydrostatic_model_accepts_an_uncorrected_depth():
-    """CHARACTERISATION, Finding 4.2 -- the largest effect found in Phase 4.
-
-    ``hydrostatic_pressure_pa`` takes a bare float. It cannot tell a sub-sea
-    depth from an along-hole depth measured from a rotary table 238.7 m above
-    sea level, and the scenario layer passes it the uncorrected one.
+    """CHARACTERISATION, Finding 4.2 / 10.2 revision. `hydrostatic_pressure_pa`
+    takes a bare float and applies no depth-reference or water-level offset;
+    the scenario passes the ingested depth unchanged. The 120 m shift below is
+    a sensitivity, not a measured datum error, and its direction is not
+    established.
     """
     s = scenario_with_brine(1050.0)
     raw = s.hydrostatic_pressure_pa(1500.0)[0]
@@ -182,7 +182,8 @@ def test_hydrostatic_model_accepts_an_uncorrected_depth():
 
 
 def test_documented_rotary_table_elevations_are_multi_megapascal():
-    """Finding 4.2 magnitude, using the two elevations the sources state."""
+    """Finding 4.2 sensitivity to the two rotary-table elevations the sources
+    state (not a measured error; see the 4.2 / 10.2 revision)."""
     for elevation_m, expected_mpa in ((120.00, 1.20), (238.7, 2.39)):
         overstatement_pa = 1020.0 * STANDARD_GRAVITY_M_S2 * elevation_m
         assert overstatement_pa / 1e6 == pytest.approx(expected_mpa, abs=0.01)
@@ -192,7 +193,11 @@ def test_documented_rotary_table_elevations_are_multi_megapascal():
 
 
 def test_fracture_gradient_is_within_normal_clastic_practice():
-    """0.6631 psi/ft and 1.530 SG equivalent mud weight, derived independently."""
+    """0.6631 psi/ft and 1.530 SG equivalent mud weight, derived independently.
+
+    The 0.60-0.80 psi/ft band is uncited engineering judgment (Finding 4.5);
+    this checks arithmetic, not validity.
+    """
     psi_per_ft = DEFAULT_FRACTURE_GRADIENT_PA_M * 0.3048 / 6894.757
     assert 0.60 < psi_per_ft < 0.80
     assert psi_per_ft == pytest.approx(0.6631, abs=0.001)
@@ -252,10 +257,10 @@ def test_theis_delta_p_is_invariant_under_a_pressure_offset():
 
 
 def test_headroom_mixes_a_gauge_initial_against_an_absolute_limit():
-    """CHARACTERISATION, Finding 4.1: headroom is overstated by exactly P_atm.
-
-    Once the hydrostatic model returns absolute pressure this difference
-    becomes zero and this test must be replaced.
+    """CHARACTERISATION, Finding 4.1 revision: if the fracture gradient is
+    absolute, headroom is overstated by exactly P_atm; its convention is
+    undocumented, so this is conditional, not a confirmed defect. Replace this
+    test once the convention is declared.
     """
     z, rho = 1527.5, 1050.0
     gauge = rho * STANDARD_GRAVITY_M_S2 * z

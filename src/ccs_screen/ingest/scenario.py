@@ -343,14 +343,13 @@ def resolve_inputs(
                     f"gradient {gradient[0]:.0f}-{gradient[1]:.0f} Pa/m"
                 ),
                 rationale=(
-                    "Normally-pressured hydrostatic assumption. No measured pressure "
-                    "exists in any source, so this is untested for this well. "
+                    "Normally-pressured hydrostatic assumption. The structured sources "
+                    "contain no pressure, so this is not calibrated by any measurement "
+                    "for this well. "
                     f"z is the source depth as recorded (datum: {record.depth_datum.value}), "
-                    "not corrected to a sub-sea datum and not a reservoir reference "
-                    "depth. Where depths run from a rotary table standing above sea "
-                    "level, this overstates the brine column and therefore the "
-                    "pressure; the two datum elevations stated in the source "
-                    "documents are 120.0 m and 238.7 m, worth 1.2-2.6 MPa."
+                    "not a reservoir reference depth. Where the water level stands, and "
+                    "so where the brine column begins, is not established; the "
+                    "direction of any resulting pressure error is unknown."
                 ),
                 evidence_class=EvidenceClass.GENERIC,
                 author=f"{scenario.name} v{scenario.version}",

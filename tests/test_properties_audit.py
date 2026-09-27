@@ -77,7 +77,8 @@ def test_typical_error_matches_the_audit():
     [(p, t, r) for p, t, r in BENCHMARK if p <= 1.5e7 and 300 <= t <= 360],
 )
 def test_italian_pilot_window_within_ten_percent(pressure_pa, temperature_k, reference):
-    """Below ~15 MPa is where the Italian pilot reservoirs sit.
+    """Below ~15 MPa: the stated reason for keeping the shift is that pilot
+    reservoirs sit here, a premise Finding 11.1 does not support.
 
     The volume translation helps here, which is the stated reason for keeping
     it despite degrading the high-pressure regime.

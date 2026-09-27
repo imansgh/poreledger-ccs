@@ -6,8 +6,9 @@ but when the data is present these are the only tests in the suite that exercise
 the real ingestion path from spreadsheet to megatonnes.
 
 Two findings here were only reachable with real data: a temperature observation
-160.9 m below its well's recorded total depth, and the per-well magnitude of the
-depth-datum bias, which turned out to be narrower than Phase 4 estimated.
+160.9 m below its well's recorded total depth, and the per-well size of the
+ground-to-sea water-level sensitivity (Finding 4.2 / 10.2 revision), narrower
+than Phase 4 estimated.
 
 See ``docs/scientific-validation-audit.md``, Phase 10.
 """
@@ -208,16 +209,16 @@ def test_other_wells_select_a_temperature_effectively_at_total_depth(records, we
     assert 0.97 <= selected[0] / record.depth_m.value <= 1.0
 
 
-# -- Finding 10.2: the datum bias --------------------------------------------
+# -- Finding 10.2: ground-to-sea water-level sensitivity ---------------------
 
 
 @pytest.mark.parametrize("well", AUDIT_WELLS)
 def test_datum_is_unknown_but_elevation_is_already_ingested(records, well):
     """Finding 10.2, the operative discovery.
 
-    The elevation needed to correct the depth is present for every well. Only
-    the datum label is missing, which is what makes the correction impossible
-    today rather than any absence of data.
+    The elevation is present for every well and the pipeline's datum label is
+    UNKNOWN. The audit has since documented the depth reference for four wells;
+    what remains open is the water level (Finding 4.2 / 10.2 revision).
     """
     record = records[well]
     assert record.depth_datum is DepthDatum.UNKNOWN
@@ -226,10 +227,9 @@ def test_datum_is_unknown_but_elevation_is_already_ingested(records, well):
 
 
 def test_saluzzo_is_the_worst_datum_bias_in_the_sample(records):
-    """CHARACTERISATION, Finding 10.2: +15.59% on capacity.
-
-    Real-data range across the sample is +1.10% to +15.59%, which supersedes the
-    8-36% Phase 4 estimated from illustrative depths.
+    """CHARACTERISATION, Finding 10.2: +15.59% capacity sensitivity if the water
+    level is moved from ground to sea level (range +1.10% to +15.59%); a
+    sensitivity, not a measured bias, direction not established.
     """
     record = records["SALUZZO|1"]
     total_depth = record.depth_m.value
@@ -248,7 +248,8 @@ def test_saluzzo_is_the_worst_datum_bias_in_the_sample(records):
 
 
 def test_the_datum_bias_shrinks_with_depth(records):
-    """It is an absolute offset against a growing column, so shallow wells suffer."""
+    """It is an absolute offset against a growing column, so the sensitivity is
+    largest in shallow wells."""
     def bias(well):
         record = records[well]
         elevation = float(record.surface_elevation_m.value)
@@ -262,7 +263,8 @@ def test_the_datum_bias_shrinks_with_depth(records):
 
 @pytest.mark.parametrize("well", SCREENABLE)
 def test_depth_disagreements_between_sources_stay_below_a_quarter_percent(records, well):
-    """Negligible next to the datum bias, and each is recorded with its locator."""
+    """Negligible next to the water-level sensitivity, and each is recorded with
+    its locator."""
     record = records[well]
     depth_conflicts = [c for c in record.conflicts if c.field_name == "depth_m"]
     for conflict in depth_conflicts:
