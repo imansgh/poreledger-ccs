@@ -2632,6 +2632,11 @@ still stands in the code. Its sub-sea framing and stated direction ("overstates
 the brine column") are superseded by *Finding 4.2 / 10.2 revision*. Changing the
 code string is a separate disclosure follow-up.
 
+*(Disclosure follow-up closed 2026-09-27: the runtime `pressure_pa` rationale
+was corrected in `src/ccs_screen/ingest/scenario.py`; the superseded
+"overstates the brine column" direction claim and 120.0/238.7 m figures were
+removed without changing pressure calculations.)*
+
 **Finding 6.4 -- the temperature conflict note no longer calls a depth spread a
 method disagreement.** `normalize.py`, inside the `note=` string of the
 `temperature_k` `Conflict`. It previously read "methods disagree by {spread} K
@@ -4003,6 +4008,9 @@ and observations column / data printout).
   `hydrostatic_from_depth` branch) still carries the superseded framing: *"not
   corrected to a sub-sea datum ... this overstates the brine column"*. That is
   code text and is not changed here. It is recorded as a disclosure follow-up.
+  *(Disclosure follow-up closed 2026-09-27: the runtime rationale was corrected
+  in `src/ccs_screen/ingest/scenario.py`; the direction of any pressure error is
+  now stated as unknown, consistent with this finding.)*
 
 #### 3. What Finding 10.2's correction actually does
 
