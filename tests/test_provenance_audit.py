@@ -258,7 +258,7 @@ def test_engineering_constants_exist_but_carry_no_citation_object(module_name, c
 
     These are scientific choices with no recorded provenance. The sharpest is
     DEFAULT_SAFETY_FACTOR, which names no regulator while multiplying the
-    injection-rate ceiling directly.
+    fracture pressure that sets the headroom, and so the injection-rate ceiling.
     """
     import importlib
 
