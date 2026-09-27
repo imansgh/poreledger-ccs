@@ -231,6 +231,7 @@ a corrected docstring, corrected test reference data, and new validation tests.
    uncertainty there was not verified from the accessible primary text. Within
    the stated region the reference uncertainty is negligible against the 2-12%
    deviations measured.
+   *(Scope corrected 2026-09-24; originally "Span & Wagner is treated as ground truth. Its own stated uncertainty is ~0.03-0.05% in the regions used, which is negligible against the 2-12% deviations measured." See Finding 11.1 revision, Reference uncertainty.)*
 3. **Grid resolution.** 140 points; a finer sweep could find a worse maximum
    than 13.98%.
 4. **Below 280 K untested.** The triple point (216.6 K) and the solid region are
@@ -2225,6 +2226,7 @@ Theis mathematics. It can reach the **rate ceiling** only through
 `allowable_delta_p_pa`, and only if the fracture gradient is absolute. There its
 effect is about 0.9% on headroom at the CLI defaults (0.56-3.34% across the
 synthetic Phase 4 cases), small next to the 5.5x from Findings 5.1 and 5.2.
+*(Revised 2026-09-24 with Finding 4.1 revision; originally "there its effect (about 2% on headroom) is small next to the 5.5x from Findings 5.1 and 5.2".)*
 
 Phase 12 inherits two genuine cross-model inconsistencies: closed trap versus
 infinite aquifer, and the unchecked duplicate thickness/porosity pairs.
@@ -4320,6 +4322,7 @@ volume translation, and the h-cancellation inside the Theis `u`.
 ### Finding 11.1 -- a third of the corpus sits outside the validated EOS envelope
 
 **REVIEW REQUIRED. Severity MEDIUM-HIGH. Positive departure from the Span–Wagner reference above 35 MPa. New.**
+*(Original status "Anti-conservative", superseded 2026-09-24; see Finding 11.1 revision.)*
 
 Agreement between two implementations of the same equation says nothing about
 whether that equation is right. The external check does.
@@ -4372,6 +4375,7 @@ Two distinct departure regions, with opposite signs:
    over-corrects. Departures of +4.9% to +8.8%, always positive. This is Phase 1
    Finding 1.1 -- previously demonstrated on a synthetic grid, now shown to
    affect a third of the actual dataset.
+   *(Revised 2026-09-24; originally "Errors of +7.8% to +8.8%".)*
 2. **Near-critical (8-9 MPa, low temperature).** Departures of -7.7% to -9.2%,
    always negative. This is Phase 1 Finding 1.3, and it too is populated:
    NOVI LIGURE|2|BIS DIR and CAVAGLIETTO|1 are real wells in this corpus.
@@ -4381,6 +4385,7 @@ a -4.58% error into +0.55%, but at MALOSSA it turns +1.67% into +7.42%. Phase 1
 concluded the shift is kept "because most Italian pilot reservoirs sit below
 20 MPa". **That premise is not supported by the pilot population** -- see the
 revision below.
+*(Originally "That premise is false for this corpus -- 15 of 44 exceed 35 MPa, and the deepest exceed 65 MPa"; revised 2026-09-24.)*
 
 Nothing is changed. Restricting the shift to low pressure, or dropping it, are
 both scientific changes to a frozen module. But the justification recorded in
@@ -4565,10 +4570,12 @@ Phase 12 inherits:
    against the paper's own test values. The published density uncertainty
    (±0.03–0.05%) covers only p <= 30 MPa and T <= 523 K. Above 30 MPa it was not
    verified from the accessible primary text.
+   *(Revised 2026-09-24; originally "It is the standard reference implementation and was cross-checked in Phase 1 against published values, but it is still one route to the truth.")*
 2. **The corpus comparison uses a single brine density (1060 kg/m3)** to set
    each well's pressure. Across the scenario's declared 1020–1100 range, the
    number of wells above 35 MPa is 13–17 of 44 (15 at 1060). Individual
    departures shift by a few tenths of a percent.
+   *(Revised 2026-09-24; originally "the 34%-above-35-MPa figure is not sensitive to that, but individual per-well errors shift by a few tenths of a percent.")*
 3. **Temperature enters the comparison as the selected observation**, so any
    Phase 6 or Phase 10 temperature finding propagates into the Span-Wagner
    reference point as well as into the PR value. The *difference* between them
@@ -4825,6 +4832,7 @@ table arithmetic.
 headline number low by a factor of 1.33 to 4.00. The combined factor with the
 other findings is conditional on the unresolved water level (Finding 12.4). The
 reported uncertainty band does not contain that bias.
+*(Revised 2026-09-24; originally "The headline number is biased by a factor between 1.15 and 3.76, and the reported uncertainty band does not contain that bias." That range is retained as a conditional case in Finding 12.4.)*
 
 ## The finding that matters
 
@@ -4834,6 +4842,7 @@ Phase 9 from CSLF-T-2008-04 itself -- and the API requires **net** thickness
 before applying it, so the reduction lands twice. Everything else in this audit
 is smaller. The one term without an established direction is Finding 4.2's
 hydraulic-reference sensitivity (up to +15.59% on capacity in Finding 10.2).
+*(Revised 2026-09-24; originally "Everything else in this audit, combined, moves the answer by less than 16%." )*
 
 The regional precedent the project follows, Donda et al. (2011), does the same
 thing and explicitly: it defines `h` as "average thickness of aquifer x average
@@ -4865,6 +4874,8 @@ The five HIGH findings:
 | 5.2 | Depth and initial pressure inconsistent | Headroom 1.72x | CLI only |
 | 12.1 | Closed trap vs infinite aquifer | Rate ceiling, unbounded | CLI only |
 | 12.5 | Systematic bias exceeds the uncertainty band | Interpretive | API + frontend |
+
+*(Revised 2026-09-24: the 4.2 row originally read "Depth not datum-corrected | Capacity +1.1% to +15.6%"; see Finding 4.2 / 10.2 revision.)*
 
 Only two of the five reach the public product. Injectivity is CLI-only, which
 contains three of them.
@@ -4898,6 +4909,8 @@ contains three of them.
    one call site, but it also moves CLI headroom unless the fracture gradient's
    convention is settled. Owner decision.
 
+*(Revised 2026-09-24: items 3–5 restated to follow the Finding 4.1, 4.2 / 10.2 and 11.1 revisions. As originally written: item 3 "Establish the depth datum … This is the cheapest real correction available"; item 4 "Measured: 15 of 44 wells exceed 35 MPa and the deepest exceed 65 MPa"; item 5 "Add `P_atm` (Finding 4.1). One constant, one call site.")*
+
 Findings 5.1, 5.2 and 12.1 are severe but CLI-only, and should be fixed together
 since all three concern the same composition.
 
@@ -4920,6 +4933,7 @@ since all three concern the same composition.
   static water level from a water-bearing interval, so no hydraulic reference
   was established (*Finding 4.2 / 10.2 revision*). The structured sources
   contain no pressure at all.
+  *(Scope corrected 2026-09-24; originally "Any measured formation pressure. None exists in the dataset.")*
 - Any stabilised bottom-hole temperature. Zero of 452 records.
 - Any net-to-gross ratio, permeability, or area for any well.
 - Whether the aquifers are laterally open or compartmentalised.
