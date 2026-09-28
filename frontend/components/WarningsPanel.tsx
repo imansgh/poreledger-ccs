@@ -41,7 +41,15 @@ export function WarningsPanel({ interpretation }: { interpretation: Interpretati
 
       <Notice tone="plain" title="Standing limitations">
         <p>{interpretation.area_policy}</p>
-        <p className="detail">{interpretation.net_thickness_policy}</p>
+        {interpretation.storage_interval_policy ? (
+          <p className="detail">{interpretation.storage_interval_policy}</p>
+        ) : null}
+        {interpretation.net_thickness_policy ? (
+          <p className="detail">{interpretation.net_thickness_policy}</p>
+        ) : null}
+        {interpretation.joint_scenario_methodology ? (
+          <p className="detail">{interpretation.joint_scenario_methodology}</p>
+        ) : null}
         <p className="detail">Basis: {interpretation.basis}</p>
       </Notice>
     </section>

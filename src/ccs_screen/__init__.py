@@ -1,7 +1,9 @@
 """Screening-grade tools for geologic CO2 storage."""
 
 from ccs_screen.api import (
+    APPROVED_REQUIRED_USER_INPUTS,
     INTERPRETATION,
+    LEGACY_REQUIRED_USER_INPUTS,
     MAX_SAMPLES,
     MIN_SAMPLES,
     REQUEST_LIMITS,
@@ -9,8 +11,19 @@ from ccs_screen.api import (
     SCALE_MISMATCH_WARNING,
     USER_INPUT_SPEC,
     ApiError,
+    ApprovedUserInputs,
     UnknownWellError,
     UserInputs,
+)
+from ccs_screen.approved_model import (
+    P_ATM_PA,
+    ApprovedModelResult,
+    Diagnostic,
+    StorageInterval,
+    ValidationStatus,
+    WaterLevelScenario,
+    evaluate_approved_model,
+    select_temperature,
 )
 from ccs_screen.capacity import volumetric_storage_mass_kg
 from ccs_screen.config import (
@@ -35,6 +48,8 @@ from ccs_screen.pressure import (
     theis_transmissivity,
 )
 from ccs_screen.properties import (
+    VALIDATED_ENVELOPE_PRESSURE_PA,
+    VALIDATED_ENVELOPE_TEMPERATURE_K,
     co2_compressibility,
     co2_density_kg_m3,
     co2_molar_volume_m3_mol,
@@ -54,27 +69,38 @@ from ccs_screen.surrogate import (
 __version__ = "0.2.0"
 
 __all__ = [
+    "APPROVED_REQUIRED_USER_INPUTS",
     "ApiError",
+    "ApprovedModelResult",
+    "ApprovedUserInputs",
     "BOUNDS",
     "CapacitySample",
     "ConfigError",
     "DEPLETED_GAS_ANALOG",
+    "Diagnostic",
     "FEATURE_ORDER",
     "INTERPRETATION",
+    "LEGACY_REQUIRED_USER_INPUTS",
     "LinearSurrogate",
     "MAX_SAMPLES",
     "MIN_SAMPLES",
     "McResult",
+    "P_ATM_PA",
     "REQUEST_LIMITS",
     "REQUIRED_FIELDS",
     "REQUIRED_USER_INPUTS",
     "SCALE_MISMATCH_WARNING",
     "ScreeningConfig",
+    "StorageInterval",
     "SurrogateMetrics",
     "USER_INPUT_SPEC",
     "UniformPriors",
     "UnknownWellError",
     "UserInputs",
+    "VALIDATED_ENVELOPE_PRESSURE_PA",
+    "VALIDATED_ENVELOPE_TEMPERATURE_K",
+    "ValidationStatus",
+    "WaterLevelScenario",
     "__version__",
     "allowable_delta_p_pa",
     "co2_compressibility",
@@ -82,6 +108,7 @@ __all__ = [
     "co2_molar_volume_m3_mol",
     "design_matrix",
     "evaluate",
+    "evaluate_approved_model",
     "fit_linear_surrogate",
     "fracture_pressure_pa",
     "max_injection_rate_m3_s",
@@ -89,6 +116,7 @@ __all__ = [
     "predict_samples",
     "run_capacity_mc",
     "sample_mass_mt",
+    "select_temperature",
     "sensitivity",
     "theis_injection_delta_p_pa",
     "theis_transmissivity",

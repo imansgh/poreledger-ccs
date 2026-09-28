@@ -6,6 +6,12 @@ also seeing how much of it rests on assumptions.
 
 The functions here are plain Python returning dataclasses with ``to_dict()``,
 so the future web API can call them directly without going through the CLI.
+
+Everything in this module is a legacy path: it runs the scenario resolver
+(pressure from total depth, the ingestion-time temperature selection) rather
+than the approved Model Contract (``ccs_screen.approved_model``). By owner
+decision O2 it is kept operational with unchanged arithmetic, and every report,
+comparison and funnel it produces carries ``validation_status = NOT_VALIDATED``.
 """
 
 from __future__ import annotations
@@ -21,6 +27,7 @@ from ccs_screen.ingest.provenance import (
 )
 from ccs_screen.ingest.records import NormalizedWellRecord
 from ccs_screen.ingest.scenario import (
+    NOT_VALIDATED,
     IncompleteScreening,
     ResolvedInput,
     ScreeningScenario,
@@ -116,6 +123,7 @@ class WellScreeningReport:
         return {
             "well_id": self.canonical_id,
             "scenario": {"name": self.scenario_name, "version": self.scenario_version},
+            "validation_status": NOT_VALIDATED,
             "screenable": self.screenable,
             "depth_m": self.depth_m,
             "source_derived_inputs": [i.name for i in self.source_inputs],
@@ -134,6 +142,7 @@ class WellScreeningReport:
         lines = [
             f"{self.canonical_id}",
             f"  scenario                 : {self.scenario_name} v{self.scenario_version}",
+            f"  validation status        : {NOT_VALIDATED} (legacy path, owner decision O2)",
         ]
         if self.depth_m is not None:
             lines.append(f"  total depth              : {self.depth_m:.1f} m")
@@ -311,6 +320,7 @@ class TemperatureComparison:
     def to_dict(self) -> dict[str, Any]:
         return {
             "well_id": self.canonical_id,
+            "validation_status": NOT_VALIDATED,
             "selected_method": self.selected_method,
             "variants": [v.to_dict() for v in self.variants],
             "p50_spread_mt": self.p50_spread_mt,
@@ -326,6 +336,10 @@ def compare_temperature_methods(
 
     No method is declared globally correct; the comparison simply shows what
     each one implies for capacity under the same scenario.
+
+    NOT_VALIDATED legacy diagnostic (O2): it uses the legacy resolver, the rank
+    table and the 0.85 near-total-depth filter, none of which is part of the
+    approved Model Contract (S2, S3).
     """
     selected = record.temperature_k.method
     reservoir = [
@@ -394,6 +408,7 @@ class ScreeningFunnel:
     def to_dict(self) -> dict[str, Any]:
         return {
             "scenario": {"name": self.scenario_name, "version": self.scenario_version},
+            "validation_status": NOT_VALIDATED,
             "normalized": self.normalized,
             "with_temperature": self.with_temperature,
             "with_gross_thickness": self.with_gross_thickness,
@@ -409,6 +424,7 @@ class ScreeningFunnel:
         lines = [
             "CCS screening funnel",
             f"  scenario                          : {self.scenario_name} v{self.scenario_version}",
+            f"  validation status                 : {NOT_VALIDATED} (legacy path, owner decision O2)",
             "",
             f"  {self.normalized} normalized wells",
             "",

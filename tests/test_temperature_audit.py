@@ -11,6 +11,14 @@ Several tests are marked CHARACTERISATION: they assert today's behaviour and
 name the finding, because Phase 6 found questionable choices it was not
 authorised to change.
 
+Phase 14. The rank table, the 0.85 filter and the ingestion-time selection
+pinned below now belong to the NOT_VALIDATED legacy paths only (owner decision
+O2); they are kept and unchanged. The approved model replaces them with the
+M3 + R1 + C3 rule (no ranking, no 0.85 filter, in-interval nearest observation,
+uncorrected BHT excluded, below-TD observations excluded), tested in
+``tests/test_approved_model.py`` and, as counterparts of the Phase 6 findings,
+in the last section of this module.
+
 See ``docs/scientific-validation-audit.md``, Phase 6.
 """
 
@@ -291,3 +299,56 @@ def test_a_horner_labelled_string_would_rank_below_an_unstabilised_reading():
         TEMPERATURE_METHOD_RANK[classified]
         > TEMPERATURE_METHOD_RANK[TemperatureMethod.NON_STABILIZED]
     )
+
+
+# -- Phase 14: the approved rule (M3, R1) against the Phase 6 findings --------
+
+
+def _approved_select(observations, z_top, z_base, depth_m=7000.0):
+    from ccs_screen.approved_model import StorageInterval, select_temperature
+    from ccs_screen.ingest.identity import canonical_well_id
+    from ccs_screen.ingest.provenance import FieldValue, Provenance, Unit
+    from ccs_screen.ingest.records import NormalizedWellRecord, TemperatureObservation
+    from ccs_screen.ingest.units import DepthDatum
+
+    record = NormalizedWellRecord(identity=canonical_well_id("PHASE6 PROBE 1"))
+    record.depth_m = FieldValue(value=depth_m, unit=Unit.METRE, provenance=Provenance.EXTRACTED,
+                                confidence=Confidence.HIGH)
+    record.depth_datum = DepthDatum.GROUND_LEVEL
+    record.temperatures = tuple(
+        TemperatureObservation(depth_m=d, temperature_k=k, method=m.value,
+                               depth_datum=DepthDatum.GROUND_LEVEL)
+        for m, k, d in observations)
+    return select_temperature(record, StorageInterval(z_top, z_base))
+
+
+def test_approved_rule_does_not_rank_fertl_wichmann_over_squarci_taffi():
+    """Finding 6.3 / S2: at one depth ST is a convention (R1-3); otherwise the nearest wins."""
+    same_depth = _approved_select([(TemperatureMethod.FERTL_WICHMANN, 431.15, 5510.0),
+                                   (TemperatureMethod.SQUARCI_TAFFI, 420.15, 5510.0)],
+                                  5400.0, 5600.0)
+    assert same_depth.selected.method == TemperatureMethod.SQUARCI_TAFFI.value
+    nearest = _approved_select([(TemperatureMethod.FERTL_WICHMANN, 431.15, 5510.0),
+                                (TemperatureMethod.SQUARCI_TAFFI, 418.15, 5000.0)],
+                               5000.0, 5600.0)
+    assert nearest.selected.method == TemperatureMethod.FERTL_WICHMANN.value
+
+
+def test_approved_rule_has_no_depth_fraction_filter():
+    """Finding 6.4 / S3: a shallow in-interval observation qualifies; no 0.85 window."""
+    selection = _approved_select([(TemperatureMethod.SQUARCI_TAFFI, 312.15, 1000.0)], 900.0, 1100.0)
+    assert selection.temperature_k == 312.15
+
+
+def test_approved_rule_never_uses_an_unstabilised_reading():
+    """Finding 6.6 / S5: uncorrected BHT is never substituted."""
+    selection = _approved_select([(TemperatureMethod.NON_STABILIZED, 399.15, 5510.0)],
+                                 5400.0, 5600.0)
+    assert not selection.available
+
+
+def test_approved_rule_excludes_trecate_observations_below_total_depth():
+    """Finding 10.1 / S11: the 6247.9 m FW reading is excluded (recorded TD 6087 m)."""
+    selection = _approved_select(TRECATE, 5900.0, 6300.0, depth_m=6087.0)
+    assert selection.temperature_k == 440.15
+    assert selection.selected.depth_m == 6000.0

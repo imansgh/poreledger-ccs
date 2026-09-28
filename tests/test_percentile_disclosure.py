@@ -11,10 +11,18 @@ the exact IEEE-754 values captured before the disclosure bundle was applied, so
 any numerical drift -- one unit in the last place -- fails.
 
 The synthetic-data section needs no ``data/``; the pinned section skips without it.
+
+Phase 14. The audited baseline was captured on the pre-contract path, which is
+now a NOT_VALIDATED legacy path (owner decision O2) with unchanged arithmetic.
+The bit-exact pins therefore run the literature parameter set through the
+legacy resolver (its example JSON file) and must still match to the last bit;
+under the approved model the same real wells are UNAVAILABLE, because no
+ingested depth reference is established (C2). Both are pinned below.
 """
 
 from __future__ import annotations
 
+import dataclasses
 import hashlib
 from pathlib import Path
 
@@ -29,7 +37,11 @@ from test_ingest_pipeline import PO_WELLS, POZZI_STORICI, _write_xlsx
 pytest.importorskip("openpyxl")
 
 VALID = {"area_m2": 8.0e7, "thickness_m": 35.0}
+APPROVED = {"area_m2": 8.0e7, "z_top": 1400.0, "z_base": 1527.0}
 BAND_CODE = "sampled_uncertainty_band_excludes_systematic_bias"
+ROOT = Path(__file__).resolve().parents[1]
+#: The literature parameter set through the legacy resolver (NOT_VALIDATED, O2).
+LEGACY_LITERATURE = str(ROOT / "examples" / "literature-screening-v1.json")
 
 
 @pytest.fixture(scope="module")
@@ -51,7 +63,26 @@ def _clean_cache():
 @pytest.fixture(scope="module")
 def payload(data_dir):
     api.clear_cache()
-    return api.screen_well("SALUZZO|1", VALID, data_dir=data_dir, samples=500, seed=3)
+    return api.screen_well("SALUZZO|1", VALID, scenario=LEGACY_LITERATURE, data_dir=data_dir,
+                           samples=500, seed=3)
+
+
+@pytest.fixture
+def approved_payload(data_dir, monkeypatch):
+    """Approved model on SALUZZO|1 with a (test-only) ground-level reference."""
+    from ccs_screen.ingest.units import DepthDatum
+
+    records = []
+    for record in api.load_records(data_dir):
+        if record.canonical_id == "SALUZZO|1":
+            record = dataclasses.replace(
+                record, depth_datum=DepthDatum.GROUND_LEVEL,
+                temperatures=tuple(dataclasses.replace(o, depth_datum=DepthDatum.GROUND_LEVEL)
+                                   for o in record.temperatures))
+        records.append(record)
+    frozen = tuple(records)
+    monkeypatch.setattr(api, "load_records", lambda *_a, **_k: frozen)
+    return api.screen_well("SALUZZO|1", APPROVED, data_dir=data_dir, samples=500, seed=3)
 
 
 # -- Finding 7.5 -------------------------------------------------------------
@@ -70,6 +101,17 @@ def test_percentile_convention_is_in_the_capacity_block(payload):
 def test_percentile_order_matches_the_stated_convention(payload):
     cap = payload["scenario_based_capacity_mt"]
     assert cap["p10"] < cap["p50"] < cap["p90"]
+
+
+def test_approved_validated_percentiles_carry_both_disclosures_and_s7(approved_payload):
+    for scenario in approved_payload["water_level_scenarios"]:
+        cap = scenario["capacity_mt"]
+        assert cap["percentile_convention"]["convention"] == "statistical"
+        assert cap["uncertainty_band"]["code"] == BAND_CODE
+        assert cap["p10"] < cap["p50"] < cap["p90"]
+        assert "not total accuracy" in cap["interpretation"]
+    codes = [w["code"] for w in approved_payload["interpretation"]["warnings"]]
+    assert BAND_CODE in codes
 
 
 def test_temperature_comparison_states_the_convention(data_dir):
@@ -110,16 +152,22 @@ def test_band_disclosure_is_an_interpretation_warning(payload):
 
 
 def test_no_band_disclosure_without_a_band(data_dir):
-    blocked = api.screen_well("SALUZZO|1", {"area_m2": 8.0e7}, data_dir=data_dir)
+    blocked = api.screen_well("SALUZZO|1", {"area_m2": 8.0e7}, scenario=LEGACY_LITERATURE,
+                              data_dir=data_dir)
     assert blocked["scenario_based_capacity_mt"] is None
     assert BAND_CODE not in [w["code"] for w in blocked["interpretation"]["warnings"]]
-    funnel = api.screening_funnel(user_inputs=VALID, data_dir=data_dir, samples=20)
+    funnel = api.screening_funnel(scenario=LEGACY_LITERATURE, user_inputs=VALID,
+                                  data_dir=data_dir, samples=20)
     assert BAND_CODE not in [w["code"] for w in funnel["interpretation"]["warnings"]]
+    # Approved model on real-reference data: every scenario UNAVAILABLE, so no band.
+    unavailable = api.screen_well("SALUZZO|1", APPROVED, data_dir=data_dir, samples=20)
+    assert BAND_CODE not in [w["code"] for w in unavailable["interpretation"]["warnings"]]
 
 
 def test_module_constants_are_not_mutated_by_requests(data_dir):
     before = (dict(api.PERCENTILE_CONVENTION), dict(api.UNCERTAINTY_BAND_DISCLOSURE))
-    first = api.screen_well("SALUZZO|1", VALID, data_dir=data_dir, samples=20)
+    first = api.screen_well("SALUZZO|1", VALID, scenario=LEGACY_LITERATURE, data_dir=data_dir,
+                            samples=20)
     first["scenario_based_capacity_mt"]["percentile_convention"]["p10"] = "tampered"
     first["scenario_based_capacity_mt"]["uncertainty_band"]["statement"] = "tampered"
     assert (api.PERCENTILE_CONVENTION, api.UNCERTAINTY_BAND_DISCLOSURE) == before
@@ -131,7 +179,7 @@ def test_module_constants_are_not_mutated_by_requests(data_dir):
 def test_percentiles_equal_the_engine_values_exactly(data_dir, payload):
     """The API block is a pass-through of np.percentile: bitwise, not approx."""
     record = next(r for r in api.load_records(data_dir) if r.canonical_id == "SALUZZO|1")
-    active = api._with_user_inputs(api._scenario(api.DEFAULT_SCENARIO),
+    active = api._with_user_inputs(api._scenario(LEGACY_LITERATURE),
                                    api.UserInputs.from_mapping(VALID))
     mc = run_capacity_mc(UniformPriors(**apply_scenario(record, active).prior_ranges())
                          .sample(500, seed=3))
@@ -144,7 +192,7 @@ def test_text_reports_state_the_convention(data_dir):
     from ccs_screen.ingest.report import screen_well as screen_record
 
     record = next(r for r in api.load_records(data_dir) if r.canonical_id == "SALUZZO|1")
-    active = api._with_user_inputs(api._scenario(api.DEFAULT_SCENARIO),
+    active = api._with_user_inputs(api._scenario(LEGACY_LITERATURE),
                                    api.UserInputs.from_mapping(VALID))
     text = screen_record(record, active, samples=50).render()
     assert "(low / median / high case)" in text
@@ -190,14 +238,17 @@ CARBONATE_NTG = {"low": 0.2, "high": 0.6, "net_criterion": "porosity_permeabilit
 @pytest.mark.parametrize("user_inputs", [VALID, {**VALID, "net_to_gross": CARBONATE_NTG}],
                          ids=["ntg-absent", "ntg-declared"])
 def test_audited_baseline_is_bit_for_bit_unchanged(well, user_inputs):
+    """The legacy path's numbers are unchanged to the last bit (O2); only labelled."""
     expected, masses_sha = BASELINE[well]
-    out = api.screen_well(well, user_inputs, data_dir=str(DATA_DIR), samples=2000, seed=42)
+    out = api.screen_well(well, user_inputs, scenario=LEGACY_LITERATURE,
+                          data_dir=str(DATA_DIR), samples=2000, seed=42)
     cap = out["scenario_based_capacity_mt"]
     assert tuple(float(cap[k]).hex() for k in ("p10", "p50", "p90", "mean")) == expected
     assert (cap["n_samples"], cap["deterministic"]) == (2000, False)
+    assert out["validation_status"] == cap["validation_status"] == "NOT_VALIDATED"
 
     record = next(r for r in api.load_records(str(DATA_DIR)) if r.canonical_id == well)
-    active = api._with_user_inputs(api._scenario(api.DEFAULT_SCENARIO),
+    active = api._with_user_inputs(api._scenario(LEGACY_LITERATURE),
                                    api.UserInputs.from_mapping(user_inputs))
     mc = run_capacity_mc(UniformPriors(**apply_scenario(record, active).prior_ranges())
                          .sample(2000, seed=42))
@@ -208,6 +259,21 @@ def test_audited_baseline_is_bit_for_bit_unchanged(well, user_inputs):
 @pytest.mark.parametrize("well", ["MALOSSA|15", "TRECATE|9|ST"])
 def test_carbonate_wells_screen_with_porosity_permeability_ntg(well):
     out = api.screen_well(well, {**VALID, "net_to_gross": CARBONATE_NTG},
-                          data_dir=str(DATA_DIR), samples=200)
+                          scenario=LEGACY_LITERATURE, data_dir=str(DATA_DIR), samples=200)
     assert out["status"] == "screened"
     assert out["thickness_provenance"]["net_to_gross"]["net_criterion"] == "porosity_permeability"
+
+
+@real_data
+@pytest.mark.parametrize("well", sorted(BASELINE))
+def test_audited_wells_are_unavailable_under_the_approved_model(well):
+    """C2 consequence on the same wells: no approved number is produced."""
+    record = next(r for r in api.load_records(str(DATA_DIR)) if r.canonical_id == well)
+    td = float(record.depth_m.value)
+    out = api.screen_well(well, {"area_m2": 8.0e7, "z_top": td - 100.0, "z_base": td},
+                          data_dir=str(DATA_DIR), samples=50, seed=42)
+    assert out["status"] == "evaluated"
+    for scenario in out["water_level_scenarios"]:
+        assert scenario["validation_status"] == "UNAVAILABLE"
+        assert scenario["capacity_mt"] is None and scenario["diagnostic_capacity_mt"] is None
+        assert scenario["diagnostics"][0]["code"] == "DEPTH_REFERENCE_NOT_ESTABLISHED"

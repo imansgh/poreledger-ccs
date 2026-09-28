@@ -104,17 +104,34 @@ def test_double_counting_understatement_is_between_one_third_and_four_times():
     assert 1 / low == pytest.approx(4.00, abs=0.01)
 
 
-def test_the_api_still_requires_net_thickness():
-    """CHARACTERISATION, Finding 9.1.
+def test_the_approved_model_uses_the_gross_interval_not_net_thickness():
+    """Finding 9.1, resolved on the approved path (Model Contract A1, A4, M1).
 
-    The double-count exists because the contract asks for net thickness. If the
-    contract ever changes to gross, Finding 9.1 is resolved and this test must
-    be replaced.
+    Replaces the characterisation ``test_the_api_still_requires_net_thickness``,
+    which said it must be replaced once the contract changed to gross. The
+    approved model takes the storage interval and derives the gross h_g, and
+    rejects thickness_m, so the gross-to-net reduction is applied once, inside
+    E. Net thickness survives only on the NOT_VALIDATED legacy paths (O2).
     """
-    from ccs_screen.api import USER_INPUT_SPEC
+    from ccs_screen.api import (
+        APPROVED_REQUIRED_USER_INPUTS,
+        LEGACY_REQUIRED_USER_INPUTS,
+        REQUIRED_USER_INPUTS,
+        USER_INPUT_SPEC,
+        ApiError,
+        ApprovedUserInputs,
+    )
 
+    assert REQUIRED_USER_INPUTS == APPROVED_REQUIRED_USER_INPUTS == ("area_m2", "z_top", "z_base")
+    with pytest.raises(ApiError, match="not an input of the approved model"):
+        ApprovedUserInputs.from_mapping({"area_m2": 1e8, "z_top": 1000.0, "z_base": 1100.0,
+                                         "thickness_m": 35.0})
+    inputs = ApprovedUserInputs.from_mapping({"area_m2": 1e8, "z_top": 1000.0, "z_base": 1100.0})
+    assert inputs.interval.h_g_m == 100.0
+    # Legacy: still net, and labelled as the legacy path.
+    assert "thickness_m" in LEGACY_REQUIRED_USER_INPUTS
     assert USER_INPUT_SPEC["thickness_m"]["label"] == "Net storage thickness"
-    assert "gross stratigraphic thickness" in USER_INPUT_SPEC["thickness_m"]["not_inferred_from"]
+    assert USER_INPUT_SPEC["thickness_m"]["model_path"] == "LEGACY_NOT_VALIDATED"
 
 
 def test_efficiency_components_multiply_into_the_adopted_range():
@@ -247,8 +264,6 @@ def test_only_the_two_literature_parameters_carry_a_citation():
 @pytest.mark.parametrize(
     "module_name,constant",
     [
-        ("ccs_screen.pressure", "DEFAULT_FRACTURE_GRADIENT_PA_M"),
-        ("ccs_screen.pressure", "DEFAULT_SAFETY_FACTOR"),
         ("ccs_screen.ingest.normalize", "RESERVOIR_DEPTH_FRACTION"),
         ("ccs_screen.ingest.normalize", "DEPTH_CONFLICT_TOLERANCE_M"),
     ],
@@ -256,15 +271,24 @@ def test_only_the_two_literature_parameters_carry_a_citation():
 def test_engineering_constants_exist_but_carry_no_citation_object(module_name, constant):
     """CHARACTERISATION, Finding 9.8.
 
-    These are scientific choices with no recorded provenance. The sharpest is
-    DEFAULT_SAFETY_FACTOR, which names no regulator while multiplying the
-    fracture pressure that sets the headroom, and so the injection-rate ceiling.
+    These are scientific choices with no recorded provenance; both are used by
+    the NOT_VALIDATED legacy paths only (O2). The former sharpest cases,
+    DEFAULT_FRACTURE_GRADIENT_PA_M and DEFAULT_SAFETY_FACTOR, were removed in
+    Phase 14 (D1); see the next test.
     """
     import importlib
 
     module = importlib.import_module(module_name)
     assert isinstance(getattr(module, constant), float)
     assert not hasattr(module, f"{constant}_CITATION")
+
+
+def test_uncited_fracture_defaults_are_removed():
+    """D1 / Finding 4.5, 9.8: removed from the approved scope, not retained."""
+    import ccs_screen.pressure as pressure
+
+    assert not hasattr(pressure, "DEFAULT_FRACTURE_GRADIENT_PA_M")
+    assert not hasattr(pressure, "DEFAULT_SAFETY_FACTOR")
 
 
 def test_co2_critical_constants_have_no_citation_object():

@@ -3,6 +3,12 @@
 Percentile convention: ``p10_mt`` is the 10th percentile, i.e. the *low* case.
 This is the statistical convention, not the petroleum P10/P90 convention where
 P10 is the high case. Read ``p10 < p50 < p90`` literally.
+
+``run_capacity_mc`` takes percentiles over every sample it is given and drops
+none. The approved model (``ccs_screen.approved_model``) checks the validated
+EOS envelope on those same realisations and blocks validated percentiles when
+any lies outside it (Model Contract M4); it never removes a draw.
+``DEPLETED_GAS_ANALOG`` feeds only the NOT_VALIDATED CLI demo (O1).
 """
 
 from __future__ import annotations

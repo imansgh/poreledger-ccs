@@ -65,6 +65,10 @@ class TemperatureMethod(str, Enum):
 #: Ranked best-to-worst for reservoir temperature. Horner correction of a real
 #: bottom-hole reading is the most defensible; a surface air mean is not a
 #: reservoir temperature at all and is never selectable as one.
+#:
+#: Legacy paths only (owner decision O2). Under the approved Model Contract no
+#: ranking of Fertl-Wichmann over Squarci-Taffi (or the reverse) is claimed
+#: (S2); the approved model does not use this table.
 TEMPERATURE_METHOD_RANK: dict[TemperatureMethod, int] = {
     TemperatureMethod.HORNER: 0,
     TemperatureMethod.FERTL_WICHMANN: 1,

@@ -58,9 +58,38 @@ AREA_POLICY_STATEMENT = (
 
 #: Gross stratigraphic thickness is source-derived; net storage thickness is not
 #: derivable from it without a net-to-gross ratio, which no source provides.
+#: Legacy paths only (``thickness_m`` input); the approved model has no
+#: thickness input and states STORAGE_INTERVAL_POLICY_STATEMENT instead.
 NET_THICKNESS_POLICY_STATEMENT = (
     "Net storage thickness is not derived from gross stratigraphic thickness. "
     "thickness_m is explicit scenario or user input."
+)
+
+#: Approved Model Contract (M1, Final Gap Closure A): the thickness term is the
+#: gross thickness h_g of a caller-designated storage-assessment interval.
+STORAGE_INTERVAL_POLICY_STATEMENT = (
+    "The storage-assessment interval (z_top, z_base) is explicit user input in the "
+    "same depth coordinate and datum as depth_m. It is not inferred from total depth "
+    "or from stratigraphic units. h_g = z_base - z_top is derived; there is no "
+    "independent thickness input."
+)
+
+#: A6 -- the exact wording the Model Contract requires wherever the storage
+#: efficiency prior is documented.
+STORAGE_EFFICIENCY_PRIOR_STATEMENT = (
+    "The Uniform distribution is a project-defined prior over the DOE-derived "
+    "P15–P85 bounds. It is not claimed to reproduce the DOE probability distribution."
+)
+
+#: O2 -- every screening path other than the approved model keeps its behaviour
+#: and carries this label.
+NOT_VALIDATED = "NOT_VALIDATED"
+
+NOT_VALIDATED_STATEMENT = (
+    "NOT_VALIDATED: this path predates the approved Model Contract "
+    "(docs/phase13-owner-decision-record.md) and does not implement it. It is kept "
+    "for compatibility and demonstration only; its outputs are not validated "
+    "scientific screening results."
 )
 
 #: Reasons given when a parameter with no literature basis is not supplied.
@@ -421,6 +450,10 @@ def apply_scenario(
 # source data constrains none of these parameters, so nothing here could be
 # authoritative. Replace them before any result is presented as a real
 # screening outcome.
+#
+# Phase 14 (owner decision O2): the placeholder scenarios are kept operational
+# and every output they produce is NOT_VALIDATED. They are not migrated to the
+# approved Model Contract.
 # ---------------------------------------------------------------------------
 
 _PLACEHOLDER = (
@@ -456,8 +489,8 @@ def _placeholder(parameter: str, value: Any, note: str) -> Assumption:
 CONSERVATIVE = ScreeningScenario(
     name="conservative-placeholder",
     description=(
-        "Deliberately pessimistic point values, for a lower-bound sanity check. "
-        "All values are placeholders."
+        "NOT_VALIDATED legacy placeholder scenario. Deliberately pessimistic point "
+        "values, for a lower-bound sanity check. All values are placeholders."
     ),
     version="0-placeholder",
     rationale=(
@@ -478,7 +511,10 @@ CONSERVATIVE = ScreeningScenario(
 
 CENTRAL = ScreeningScenario(
     name="central-placeholder",
-    description="Mid-range point values for a deterministic base case. All values are placeholders.",
+    description=(
+        "NOT_VALIDATED legacy placeholder scenario. Mid-range point values for a "
+        "deterministic base case. All values are placeholders."
+    ),
     version="0-placeholder",
     rationale=(
         "Midpoints of the demo priors. Deterministic, so the Monte Carlo collapses "
@@ -499,8 +535,9 @@ CENTRAL = ScreeningScenario(
 SENSITIVITY = ScreeningScenario(
     name="sensitivity-placeholder",
     description=(
-        "Ranges on the major uncertain parameters, so the Monte Carlo produces a "
-        "real P10/P50/P90 spread. All ranges are placeholders."
+        "NOT_VALIDATED legacy placeholder scenario. Ranges on the major uncertain "
+        "parameters, so the Monte Carlo produces a real P10/P50/P90 spread. All "
+        "ranges are placeholders."
     ),
     version="0-placeholder",
     rationale=(
@@ -572,18 +609,22 @@ _NOT_SITE_SPECIFIC = (
 LITERATURE_SCREENING_V1 = ScreeningScenario(
     name="literature-screening-v1",
     description=(
-        "Literature-constrained screening scenario. Storage efficiency and porosity are "
-        "taken from published methodology and a regional Italian compilation; pressure is "
-        "derived per well from source depth under a declared hydrostatic model. Area and "
-        "net thickness have no literature basis and must be supplied by the user."
+        "Literature-constrained parameter set of the approved Model Contract. Storage "
+        "efficiency and porosity are taken from published methodology and a regional "
+        "Italian compilation; brine density declares the hydrostatic model. In the public "
+        "API this scenario runs the approved model: the caller supplies area_m2 and the "
+        "storage-assessment interval (z_top, z_base), and both named water-level scenarios "
+        "(GROUND_REFERENCE, SEA_LEVEL_SENSITIVITY) are evaluated. Applied through the "
+        "legacy scenario resolver (ccs-ingest) its outputs are NOT_VALIDATED."
     ),
     version="1",
     date=_LIT_DATE,
     rationale=(
         "Replaces placeholder values with the only two parameters the literature supports "
-        "for this play type, and makes the two it does not support (area_m2, thickness_m) "
-        "explicit user inputs rather than silent defaults. Produces scenario-based capacity, "
-        "not a site estimate. See docs/scenario-literature-review.md."
+        "for this play type. Area and the storage-assessment interval have no literature "
+        "basis and are explicit user inputs rather than silent defaults. Produces "
+        "scenario-based capacity, not a site estimate. See docs/scenario-literature-review.md "
+        "and docs/phase13-owner-decision-record.md."
     ),
     citation=CSLF_2008,
     brine_density_kg_m3=(1020.0, 1100.0),
@@ -598,7 +639,10 @@ LITERATURE_SCREENING_V1 = ScreeningScenario(
                 rationale=(
                     "CSLF/USDOE P15-P85 storage efficiency for deep saline aquifers, from "
                     "Monte Carlo simulation of North American formations. Applied to Italian "
-                    "aquifers by Donda et al. (2011). "
+                    "aquifers by Donda et al. (2011). Aggregate DOE-style E: the gross-to-net "
+                    "reduction is represented inside E, which is never divided by a "
+                    "net-to-gross ratio. "
+                    + STORAGE_EFFICIENCY_PRIOR_STATEMENT + " "
                     + _NOT_SITE_SPECIFIC +
                     " The range is calibrated against basin-scale area, which is why area_m2 "
                     "must be supplied consistently (see the area policy)."

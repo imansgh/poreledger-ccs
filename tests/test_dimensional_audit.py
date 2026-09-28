@@ -184,7 +184,10 @@ def test_hydrostatic_pressure_has_pascal_dimension():
 
 
 def test_fracture_pressure_is_exactly_linear_in_depth():
-    assert fracture_pressure_pa(4000.0) / fracture_pressure_pa(2000.0) == pytest.approx(2.0, abs=1e-12)
+    """Phase 14 (D1): the gradient has no default; 17 000 Pa/m is an arbitrary test value."""
+    gradient = 17_000.0
+    assert (fracture_pressure_pa(4000.0, gradient) / fracture_pressure_pa(2000.0, gradient)
+            == pytest.approx(2.0, abs=1e-12))
 
 
 # -- conversion constants ----------------------------------------------------

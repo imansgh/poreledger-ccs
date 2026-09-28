@@ -52,10 +52,24 @@ Scenario-based CO2 storage screening over normalized Italian well data.
 carries an `interpretation` block stating that it is a scenario-based screening
 capacity, not a certified or proven resource.
 
-`area_m2` and `thickness_m` have no source data and no literature range. They
-are **required caller inputs with no defaults**, and are never inferred from
-licence boundaries, concession polygons, well spacing, a radius around a well,
-or gross stratigraphic thickness.
+**Approved model** (`literature-screening-v1`, the default): the owner-approved
+Phase 13 Model Contract. The caller supplies `area_m2` and the
+storage-assessment interval `z_top`, `z_base` (depth below ground level in the
+well's `depth_m` datum); `h_g = z_base - z_top` is derived and `thickness_m` is
+rejected. Both named water-level scenarios, `GROUND_REFERENCE` and
+`SEA_LEVEL_SENSITIVITY`, are always evaluated, each with its own
+`validation_status` (`VALIDATED`, `OUTSIDE_VALIDATED_ENVELOPE`, `UNAVAILABLE`)
+and diagnostics. A well whose depth reference is not established returns
+`UNAVAILABLE`.
+
+**Legacy scenarios** (`conservative`, `central`, `sensitivity`, `none`) keep
+their inputs (`area_m2`, `thickness_m`) and behaviour and are labelled
+`validation_status: NOT_VALIDATED`, as is the temperature-method comparison.
+
+None of the caller inputs has source data or a literature range. They are
+**required, with no defaults**, and are never inferred from licence boundaries,
+concession polygons, well spacing, a radius around a well, total depth,
+stratigraphic units or gross stratigraphic thickness.
 
 Error mapping: `400` for a rejected domain request (`ApiError`), `404` for an
 unknown well, `413` for an oversized body, `422` for a schema violation
@@ -229,12 +243,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     ) -> dict[str, Any]:
         """Screen a well under a scenario plus caller-supplied inputs.
 
-        A well that cannot be screened returns 200 with ``status: "blocked"``
-        and the reasons; that is an outcome, not an error.
+        The approved model returns ``status: "evaluated"`` with both named
+        water-level scenarios and their statuses; a legacy scenario returns its
+        NOT_VALIDATED result. A well that cannot be screened returns 200 with
+        ``status: "blocked"`` and the reasons; that is an outcome, not an error.
+        Only the inputs actually sent are passed on (``exclude_none``), so the
+        API sees exactly what the caller supplied.
         """
         return api.screen_well(
             well_id,
-            user_inputs=request.user_inputs.model_dump(),
+            user_inputs=request.user_inputs.model_dump(exclude_none=True),
             scenario=resolve_scenario_name(request.scenario),
             data_dir=config.data_dir,
             samples=request.samples,
@@ -247,10 +265,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         well_id: str = Path(..., description="Canonical id"),
         request: TemperatureRequest = Body(...),
     ) -> dict[str, Any]:
-        """What each available temperature method implies for capacity."""
+        """What each available temperature method implies for capacity.
+
+        A NOT_VALIDATED legacy diagnostic; it takes the legacy inputs
+        ``area_m2`` and ``thickness_m``.
+        """
         return api.compare_temperature_methods(
             well_id,
-            user_inputs=request.user_inputs.model_dump(),
+            user_inputs=request.user_inputs.model_dump(exclude_none=True),
             scenario=resolve_scenario_name(request.scenario),
             data_dir=config.data_dir,
             samples=request.samples,
@@ -267,10 +289,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         scenario: str = Query(api.DEFAULT_SCENARIO, max_length=200),
         samples: int = Query(200, ge=api.MIN_SAMPLES, le=api.MAX_SAMPLES),
     ) -> dict[str, Any]:
-        """Fleet-level completeness counts, with the states kept distinct.
+        """Fleet-level counts, with the states kept distinct.
 
-        No user inputs, so this reports what the data alone supports: zero
-        screenable wells.
+        No user inputs. Under the approved model this reports depth-reference
+        readiness (an approved result needs a per-well interval); under a
+        legacy scenario it is the NOT_VALIDATED completeness funnel.
         """
         return api.screening_funnel(scenario=resolve_scenario_name(scenario),
                                     data_dir=config.data_dir, samples=samples)

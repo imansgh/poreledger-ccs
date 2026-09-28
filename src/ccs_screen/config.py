@@ -86,6 +86,13 @@ REQUIRED_FIELDS = (
 #: Fields expressed as uniform priors (scalar or [low, high]).
 RANGE_FIELDS = REQUIRED_FIELDS
 
+#: Scalars with no default. The former 15,000 Pa/m gradient and 0.9 safety
+#: factor had no documented source and are removed from the approved scope
+#: (Model Contract D1, Final Gap Closure rule B). Absent means the outputs that
+#: depend on them are UNAVAILABLE; a caller-supplied value is used as given and
+#: its outputs are NOT_VALIDATED.
+UNSET_BY_DEFAULT_FIELDS = ("fracture_gradient_pa_m", "safety_factor")
+
 
 @dataclass(frozen=True)
 class ScreeningConfig:
@@ -98,7 +105,9 @@ class ScreeningConfig:
     Optional metadata:
         well_id -- free-text provenance label, carried into the report
 
-    Optional scalars default to the engine's documented screening defaults.
+    Optional scalars default to the engine's documented screening defaults,
+    except ``fracture_gradient_pa_m`` and ``safety_factor``, which have no
+    default (``None``; see ``UNSET_BY_DEFAULT_FIELDS``).
     """
 
     # Required capacity priors.
@@ -122,8 +131,8 @@ class ScreeningConfig:
     aquifer_porosity: float = 0.18
     compressibility_1_pa: float = 1.2e-9
     rate_m3_s: float = 0.08
-    fracture_gradient_pa_m: float = 15_000.0
-    safety_factor: float = 0.9
+    fracture_gradient_pa_m: float | None = None
+    safety_factor: float | None = None
 
     # Run control.
     samples: int = 2_000
@@ -135,6 +144,8 @@ class ScreeningConfig:
             problems += _check_range(name, getattr(self, name))
         for spec in fields(self):
             if spec.name in RANGE_FIELDS or spec.name in ("well_id", "seed"):
+                continue
+            if spec.name in UNSET_BY_DEFAULT_FIELDS and getattr(self, spec.name) is None:
                 continue
             problems += _check_scalar(spec.name, getattr(self, spec.name))
         if self.well_id is not None and not str(self.well_id).strip():
@@ -170,6 +181,9 @@ class ScreeningConfig:
             value = data[name]
             if name == "well_id":
                 kwargs[name] = value
+                continue
+            if name in UNSET_BY_DEFAULT_FIELDS and value is None:
+                kwargs[name] = None
                 continue
             if name in RANGE_FIELDS:
                 parsed, err = _coerce_range(name, value)

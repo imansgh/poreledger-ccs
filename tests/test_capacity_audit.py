@@ -27,6 +27,7 @@ from ccs_screen.ingest.records import ThicknessKind
 from ccs_screen.ingest.scenario import (
     AREA_POLICY_STATEMENT,
     NET_THICKNESS_POLICY_STATEMENT,
+    STORAGE_INTERVAL_POLICY_STATEMENT,
 )
 
 BASE = dict(
@@ -151,12 +152,32 @@ def test_gross_and_net_thickness_are_distinct_kinds():
     assert len({k.value for k in ThicknessKind}) == 3
 
 
-def test_thickness_spec_forbids_gross_substitution():
+def test_approved_thickness_term_is_the_derived_interval_thickness():
+    """A1, M1 (Phase 14). The approved input is the storage-assessment interval,
+    not a thickness: h_g = z_base - z_top is derived, and neither bound may be
+    inferred from total depth, stratigraphic units or gross stratigraphic
+    thickness."""
+    from ccs_screen.api import APPROVED_REQUIRED_USER_INPUTS
+    from ccs_screen.approved_model import StorageInterval
+
+    assert APPROVED_REQUIRED_USER_INPUTS == ("area_m2", "z_top", "z_base")
+    for name in ("z_top", "z_base"):
+        spec = USER_INPUT_SPEC[name]
+        assert spec["unit"] == "m"
+        assert spec["policy"] == STORAGE_INTERVAL_POLICY_STATEMENT
+        for forbidden in ("total well depth", "stratigraphic units", "gross stratigraphic thickness"):
+            assert forbidden in spec["not_inferred_from"]
+    assert StorageInterval(1400.0, 1435.0).h_g_m == 35.0
+
+
+def test_legacy_thickness_spec_forbids_gross_substitution():
+    """The legacy (NOT_VALIDATED, O2) net-thickness input keeps its semantics."""
     spec = USER_INPUT_SPEC["thickness_m"]
     assert spec["label"] == "Net storage thickness"
     assert "gross stratigraphic thickness" in spec["not_inferred_from"]
     assert "total well depth" in spec["not_inferred_from"]
     assert spec["policy"] == NET_THICKNESS_POLICY_STATEMENT
+    assert spec["model_path"] == "LEGACY_NOT_VALIDATED"
 
 
 def test_no_net_to_gross_factor_exists_in_the_engine():
@@ -196,11 +217,14 @@ def test_area_spec_declares_closure_scale_and_its_exclusions():
 
 
 def test_both_uncited_inputs_have_no_default():
-    """Neither may acquire a default: both are linear multipliers on the answer."""
-    for field in ("area_m2", "thickness_m"):
+    """None may acquire a default: area and thickness are linear multipliers on
+    the answer, and on the approved model the interval sets h_g and z_state."""
+    for field in ("area_m2", "thickness_m", "z_base"):
         spec = USER_INPUT_SPEC[field]
         assert "default" not in spec
         assert spec["minimum_exclusive"] == 0.0
+    assert "default" not in USER_INPUT_SPEC["z_top"]
+    assert USER_INPUT_SPEC["z_top"]["minimum_inclusive"] == 0.0
 
 
 # -- validation --------------------------------------------------------------

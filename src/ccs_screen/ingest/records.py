@@ -84,10 +84,15 @@ class ThicknessKind(str, Enum):
     """The three thicknesses this domain must never conflate.
 
     Reconnaissance found only GROSS_STRATIGRAPHIC available (91-2557 m across
-    the pilot wells), while the engine's ``thickness_m`` means NET_STORAGE
+    the pilot wells), while the legacy paths' ``thickness_m`` means NET_STORAGE
     (tens of metres). Substituting one for the other overstates capacity by
     1.5-128x across the observed range, so they are separate types and no code
     path converts between them.
+
+    The approved Model Contract uses none of these as an input: its thickness
+    term is ``h_g = z_base - z_top``, the gross thickness of a caller-designated
+    storage-assessment interval (A1, M1), which is neither the logged
+    chronostratigraphic unit nor a net thickness.
     """
 
     GROSS_STRATIGRAPHIC = "gross_stratigraphic"
@@ -112,7 +117,13 @@ class StratigraphicInterval:
 
 @dataclass(frozen=True)
 class TemperatureObservation:
-    """One temperature reading with the method that produced it."""
+    """One temperature reading with the method that produced it.
+
+    ``depth_datum`` is the reference surface of ``depth_m``. No source states
+    it, so ingestion leaves it UNKNOWN; under the approved Model Contract (C2,
+    O4) an observation qualifies only when it is explicitly GROUND_LEVEL, the
+    reference of the well's own ``depth_m``. No conversion is ever applied.
+    """
 
     depth_m: float
     temperature_k: float
@@ -120,6 +131,7 @@ class TemperatureObservation:
     hours_since_circulation: float | None = None
     source: SourceRef | None = None
     original_celsius: float | None = None
+    depth_datum: DepthDatum = DepthDatum.UNKNOWN
 
 
 @dataclass

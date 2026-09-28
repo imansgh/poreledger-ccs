@@ -356,8 +356,10 @@ def test_comparison_does_not_declare_a_winner(records):
     """Every variant is reported; none is marked globally correct."""
     payload = compare_temperature_methods(records["SALUZZO|1"], SENSITIVITY, samples=200).to_dict()
     assert len(payload["variants"]) >= 2
-    assert set(payload) == {"well_id", "selected_method", "variants",
+    # Phase 14 (O2): the comparison is a legacy diagnostic and carries its label.
+    assert set(payload) == {"well_id", "validation_status", "selected_method", "variants",
                             "p50_spread_mt", "p50_spread_percent"}
+    assert payload["validation_status"] == "NOT_VALIDATED"
     assert all("correct" not in str(v) for v in payload["variants"])
 
 
@@ -365,3 +367,35 @@ def test_surface_air_only_well_has_nothing_to_compare(records):
     comparison = compare_temperature_methods(records["ASIGLIANO|1"], SENSITIVITY, samples=50)
     assert comparison.variants == ()
     assert comparison.p50_spread_mt is None
+
+
+# -- Phase 14: owner decision O2 labels ---------------------------------------
+
+
+@pytest.mark.parametrize("scenario", [CONSERVATIVE, CENTRAL, SENSITIVITY])
+def test_placeholder_descriptions_state_not_validated(scenario):
+    assert "NOT_VALIDATED" in scenario.description
+
+
+def test_legacy_report_is_labelled_not_validated(records):
+    report = screen_well(records["SALUZZO|1"], SENSITIVITY, samples=50)
+    assert report.to_dict()["validation_status"] == "NOT_VALIDATED"
+    assert "NOT_VALIDATED (legacy path, owner decision O2)" in report.render()
+
+
+def test_legacy_funnel_is_labelled_not_validated(records):
+    recs = list(records.values())
+    funnel = build_funnel(recs, SENSITIVITY, [screen_well(r, SENSITIVITY, samples=20) for r in recs])
+    assert funnel.to_dict()["validation_status"] == "NOT_VALIDATED"
+    assert "NOT_VALIDATED (legacy path, owner decision O2)" in funnel.render()
+
+
+def test_legacy_arithmetic_is_unchanged_by_the_labels(records):
+    """O2: labels only. The legacy engine output equals a direct engine run."""
+    from ccs_screen.monte_carlo import UniformPriors, run_capacity_mc
+
+    report = screen_well(records["SALUZZO|1"], SENSITIVITY, samples=300, seed=4)
+    config = apply_scenario(records["SALUZZO|1"], SENSITIVITY)
+    direct = run_capacity_mc(UniformPriors(**config.prior_ranges()).sample(300, seed=4))
+    assert (report.result.p10_mt, report.result.p50_mt, report.result.p90_mt) == (
+        direct.p10_mt, direct.p50_mt, direct.p90_mt)

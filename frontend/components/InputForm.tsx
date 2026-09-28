@@ -1,15 +1,54 @@
 "use client";
 
 import { useState } from "react";
+import { Notice } from "./Notice";
 import { km2ToM2 } from "@/lib/format";
-import type { ScenarioSummary, UserInputValues } from "@/lib/types";
+import type { RequiredInputSpec, ScenarioSummary, UserInputValues } from "@/lib/types";
+
+/** Reader-facing label and hint per input. The API spec supplies the policy. */
+const FIELD_TEXT: Record<string, { label: string; hint: string; required: string }> = {
+  area_m2: {
+    label: "Storage area (km²)",
+    hint:
+      "Structural closure area. Not inferred from licence boundaries, concession " +
+      "polygons, well spacing or a radius around the well. Sent to the API in m².",
+    required: "Storage area is required.",
+  },
+  z_top: {
+    label: "Storage interval top, z_top (m below ground level)",
+    hint:
+      "Top of the designated storage-assessment interval, in the same depth " +
+      "coordinate and datum as the well's total depth. Not inferred from total " +
+      "depth or stratigraphic units.",
+    required: "Storage interval top (z_top) is required.",
+  },
+  z_base: {
+    label: "Storage interval base, z_base (m below ground level)",
+    hint:
+      "Base of the designated storage-assessment interval. The API derives the " +
+      "gross thickness and state-point depth from the interval; this form does not.",
+    required: "Storage interval base (z_base) is required.",
+  },
+  thickness_m: {
+    label: "Net reservoir thickness (m)",
+    hint:
+      "Legacy NOT_VALIDATED scenarios only. This is not inferred from gross " +
+      "stratigraphic thickness.",
+    required: "Net reservoir thickness is required.",
+  },
+};
+
+type Values = Record<string, string>;
+type Errors = Record<string, string>;
 
 /**
- * The two inputs the backend refuses to invent.
+ * The inputs the backend refuses to invent, as the selected scenario requires
+ * them (the API's required-inputs list decides which fields appear).
  *
- * Both fields start empty. A default here would be a hidden geological
+ * Every field starts empty. A default here would be a hidden geological
  * assumption wearing the clothes of a result, which is exactly what the
- * backend contract exists to prevent.
+ * backend contract exists to prevent. The form checks only that each value is
+ * a usable number; it computes nothing from them.
  *
  * Area is entered in km2 because that is the scale an engineer thinks in, and
  * converted to m2 explicitly before the request.
@@ -17,6 +56,7 @@ import type { ScenarioSummary, UserInputValues } from "@/lib/types";
 export function InputForm({
   scenarios,
   scenario,
+  required,
   onScenarioChange,
   onSubmit,
   onCompareTemperature,
@@ -25,35 +65,50 @@ export function InputForm({
 }: {
   scenarios: ScenarioSummary[];
   scenario: string;
+  required: RequiredInputSpec[] | null;
   onScenarioChange: (name: string) => void;
   onSubmit: (values: UserInputValues) => void;
-  onCompareTemperature: (values: UserInputValues) => void;
+  /** Only offered on NOT_VALIDATED legacy scenarios. */
+  onCompareTemperature: ((values: UserInputValues) => void) | null;
   busy: boolean;
   disabled: boolean;
 }) {
-  const [areaKm2, setAreaKm2] = useState("");
-  const [thickness, setThickness] = useState("");
-  const [errors, setErrors] = useState<{ area?: string; thickness?: string }>({});
+  const [values, setValues] = useState<Values>({});
+  const [errors, setErrors] = useState<Errors>({});
+
+  const fields = (required ?? []).map((spec) => spec.field);
 
   function validate(): UserInputValues | null {
-    const next: { area?: string; thickness?: string } = {};
-    const area = Number(areaKm2);
-    const net = Number(thickness);
-
-    if (areaKm2.trim() === "") next.area = "Storage area is required.";
-    else if (!Number.isFinite(area)) next.area = "Enter a finite number.";
-    else if (area <= 0) next.area = "Must be greater than 0.";
-
-    if (thickness.trim() === "") next.thickness = "Net reservoir thickness is required.";
-    else if (!Number.isFinite(net)) next.thickness = "Enter a finite number.";
-    else if (net <= 0) next.thickness = "Must be greater than 0.";
-
+    const next: Errors = {};
+    const parsed: Record<string, number> = {};
+    for (const field of fields) {
+      const raw = (values[field] ?? "").trim();
+      const number = Number(raw);
+      if (raw === "") next[field] = FIELD_TEXT[field]?.required ?? `${field} is required.`;
+      else if (!Number.isFinite(number)) next[field] = "Enter a finite number.";
+      else if (field === "z_top" && number < 0) next[field] = "Must be 0 or greater.";
+      else if (field !== "z_top" && number <= 0) next[field] = "Must be greater than 0.";
+      else parsed[field] = number;
+    }
+    if (
+      parsed.z_top !== undefined &&
+      parsed.z_base !== undefined &&
+      !(parsed.z_base > parsed.z_top)
+    ) {
+      next.z_base = "Must be deeper than z_top.";
+    }
     setErrors(next);
-    if (Object.keys(next).length > 0) return null;
-    return { area_m2: km2ToM2(area), thickness_m: net };
+    if (fields.length === 0 || Object.keys(next).length > 0) return null;
+
+    const out: UserInputValues = { area_m2: km2ToM2(parsed.area_m2) };
+    if (fields.includes("z_top")) out.z_top = parsed.z_top;
+    if (fields.includes("z_base")) out.z_base = parsed.z_base;
+    if (fields.includes("thickness_m")) out.thickness_m = parsed.thickness_m;
+    return out;
   }
 
   const active = scenarios.find((s) => s.name === scenario || s.aliases.includes(scenario));
+  const notValidated = active?.validation_status === "NOT_VALIDATED";
 
   return (
     <section className="panel" aria-labelledby="inputs-heading">
@@ -62,8 +117,8 @@ export function InputForm({
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          const values = validate();
-          if (values) onSubmit(values);
+          const parsed = validate();
+          if (parsed) onSubmit(parsed);
         }}
         noValidate
       >
@@ -77,6 +132,7 @@ export function InputForm({
             {scenarios.map((s) => (
               <option key={s.name} value={s.name}>
                 {s.name} (v{s.version})
+                {s.validation_status === "NOT_VALIDATED" ? " - NOT_VALIDATED" : ""}
               </option>
             ))}
           </select>
@@ -86,72 +142,72 @@ export function InputForm({
               ranges, not measurements from this well.
             </p>
           ) : null}
-        </div>
-
-        <div className="field">
-          <label htmlFor="area">Storage area (km&sup2;)</label>
-          <input
-            id="area"
-            type="number"
-            inputMode="decimal"
-            step="any"
-            min="0"
-            value={areaKm2}
-            aria-invalid={Boolean(errors.area)}
-            aria-describedby="area-hint area-error"
-            onChange={(e) => setAreaKm2(e.target.value)}
-          />
-          <p className="hint" id="area-hint">
-            Structural closure area. Not inferred from licence boundaries,
-            concession polygons, well spacing or a radius around the well. Sent
-            to the API in m&sup2;.
-          </p>
-          {errors.area ? (
-            <p className="field-error" id="area-error" role="alert">
-              {errors.area}
-            </p>
+          {notValidated ? (
+            <Notice tone="advisory" title="NOT_VALIDATED legacy scenario">
+              <p>Its results do not come from the approved Model Contract.</p>
+            </Notice>
           ) : null}
         </div>
 
-        <div className="field">
-          <label htmlFor="thickness">Net reservoir thickness (m)</label>
-          <input
-            id="thickness"
-            type="number"
-            inputMode="decimal"
-            step="any"
-            min="0"
-            value={thickness}
-            aria-invalid={Boolean(errors.thickness)}
-            aria-describedby="thickness-hint thickness-error"
-            onChange={(e) => setThickness(e.target.value)}
-          />
-          <p className="hint" id="thickness-hint">
-            This is not inferred from gross stratigraphic thickness.
+        {required === null ? (
+          <p className="unavailable" role="status">
+            Loading the inputs this scenario requires...
           </p>
-          {errors.thickness ? (
-            <p className="field-error" id="thickness-error" role="alert">
-              {errors.thickness}
-            </p>
-          ) : null}
-        </div>
+        ) : null}
+
+        {fields.map((field) => {
+          const text = FIELD_TEXT[field] ?? { label: field, hint: "", required: "" };
+          return (
+            <div className="field" key={field}>
+              <label htmlFor={`input-${field}`}>{text.label}</label>
+              <input
+                id={`input-${field}`}
+                type="number"
+                inputMode="decimal"
+                step="any"
+                min="0"
+                value={values[field] ?? ""}
+                aria-invalid={Boolean(errors[field])}
+                aria-describedby={`${field}-hint ${field}-error`}
+                onChange={(e) => setValues((prev) => ({ ...prev, [field]: e.target.value }))}
+              />
+              <p className="hint" id={`${field}-hint`}>
+                {text.hint}
+              </p>
+              {errors[field] ? (
+                <p className="field-error" id={`${field}-error`} role="alert">
+                  {errors[field]}
+                </p>
+              ) : null}
+            </div>
+          );
+        })}
 
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <button type="submit" disabled={busy || disabled}>
+          <button type="submit" disabled={busy || disabled || required === null}>
             {busy ? "Running..." : "Run screening"}
           </button>
-          <button
-            type="button"
-            className="secondary"
-            disabled={busy || disabled}
-            onClick={() => {
-              const values = validate();
-              if (values) onCompareTemperature(values);
-            }}
-          >
-            Compare temperature methods
-          </button>
+          {onCompareTemperature ? (
+            <button
+              type="button"
+              className="secondary"
+              disabled={busy || disabled || required === null}
+              onClick={() => {
+                const parsed = validate();
+                if (parsed) onCompareTemperature(parsed);
+              }}
+            >
+              Compare temperature methods (NOT_VALIDATED)
+            </button>
+          ) : null}
         </div>
+        {!onCompareTemperature && required !== null ? (
+          <p className="hint">
+            Under the approved model, temperature is selected by the contract rule
+            and shown with the result. The temperature-method comparison is a
+            NOT_VALIDATED legacy diagnostic, offered on legacy scenarios only.
+          </p>
+        ) : null}
       </form>
     </section>
   );

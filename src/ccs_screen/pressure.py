@@ -3,6 +3,15 @@
 This is a screening bound on aquifer pressurization, not a two-phase CO2 plume
 model. Dp is linear in rate, which is what makes the injectivity inversion in
 ``max_injection_rate_m3_s`` exact rather than iterative.
+
+Scope (Phase 13 Model Contract, D1 and Final Gap Closure rule B). Nothing in
+this module is part of the approved scientific model. The Theis infinite-acting
+solution is an injectivity formulation the contract does not adopt, and no
+fracture-gradient criterion, safety factor, evaluation radius or
+bounded-aquifer solution is approved. The functions below are arithmetic only:
+they take every criterion as an explicit argument and supply none. The former
+defaults (15,000 Pa/m and a 0.9 safety factor) had no documented source and
+have been removed; they are not retained as approved values.
 """
 
 from __future__ import annotations
@@ -10,12 +19,6 @@ from __future__ import annotations
 import math
 
 from scipy.special import exp1
-
-#: Typical fracture gradient for a normally-pressured clastic sequence (Pa/m).
-DEFAULT_FRACTURE_GRADIENT_PA_M = 15_000.0
-
-#: Fraction of the fracture pressure regulators typically allow as a ceiling.
-DEFAULT_SAFETY_FACTOR = 0.9
 
 
 def _require_positive(**values: float) -> None:
@@ -89,10 +92,11 @@ def max_injection_rate_m3_s(
     return allowable_delta_p_pa / unit_dp
 
 
-def fracture_pressure_pa(
-    depth_m: float, fracture_gradient_pa_m: float = DEFAULT_FRACTURE_GRADIENT_PA_M
-) -> float:
-    """Formation fracture pressure from a depth and a gradient."""
+def fracture_pressure_pa(depth_m: float, fracture_gradient_pa_m: float) -> float:
+    """Formation fracture pressure from a depth and a caller-supplied gradient.
+
+    The gradient is required: no fracture gradient is approved (D1, D2).
+    """
     _require_positive(depth_m=depth_m, fracture_gradient_pa_m=fracture_gradient_pa_m)
     return depth_m * fracture_gradient_pa_m
 
@@ -100,10 +104,14 @@ def fracture_pressure_pa(
 def allowable_delta_p_pa(
     initial_pressure_pa: float,
     depth_m: float,
-    fracture_gradient_pa_m: float = DEFAULT_FRACTURE_GRADIENT_PA_M,
-    safety_factor: float = DEFAULT_SAFETY_FACTOR,
+    fracture_gradient_pa_m: float,
+    safety_factor: float,
 ) -> float:
     """Pressure headroom between the initial reservoir pressure and the fracture limit.
+
+    Both the gradient and the safety factor are required, caller-supplied
+    values; neither is approved (D1, rule B). The pressure convention of the
+    headroom check is deferred (B2).
 
     Returns 0.0 when the reservoir is already at or above the derated fracture
     pressure, which is the screening signal that there is no injection window.

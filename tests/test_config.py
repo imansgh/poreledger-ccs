@@ -57,9 +57,24 @@ def test_unspecified_fields_fall_back_to_engine_defaults():
     config = ScreeningConfig.from_mapping(base_mapping())
     assert config.permeability_m2 == 8e-14
     assert config.radius_m == 500.0
-    assert config.safety_factor == 0.9
     assert config.seed == 42
     assert config.well_id is None
+
+
+def test_fracture_criterion_has_no_default():
+    """Phase 14 (D1, rule B): the uncited 15 000 Pa/m and SF = 0.9 are removed.
+
+    Absent (or null) means the outputs that depend on them are UNAVAILABLE.
+    """
+    config = ScreeningConfig.from_mapping(base_mapping())
+    assert config.fracture_gradient_pa_m is None
+    assert config.safety_factor is None
+    explicit_null = ScreeningConfig.from_mapping(
+        base_mapping(fracture_gradient_pa_m=None, safety_factor=None))
+    assert explicit_null.fracture_gradient_pa_m is None and explicit_null.safety_factor is None
+    supplied = ScreeningConfig.from_mapping(
+        base_mapping(fracture_gradient_pa_m=17_000.0, safety_factor=0.8))
+    assert (supplied.fracture_gradient_pa_m, supplied.safety_factor) == (17_000.0, 0.8)
 
 
 def test_scalar_and_range_spellings_are_both_accepted():
@@ -248,7 +263,27 @@ def test_cli_loads_a_config_file(capsys):
     report = json.loads(capsys.readouterr().out)
     assert report["well_id"] == "WELL-001"
     assert report["n_samples"] == 300
-    assert report["injectivity"]["fracture_pressure_pa"] == pytest.approx(2450.0 * 15_000.0)
+    assert report["validation_status"] == "NOT_VALIDATED"
+    # The fixture supplies no fracture criterion and none has a default (D1).
+    assert report["injectivity"]["fracture_pressure_pa"] is None
+    assert report["injectivity"]["output_status"]["fracture_pressure_pa"] == "UNAVAILABLE"
+
+
+def _config_with_criterion(tmp_path):
+    data = json.loads(VALID.read_text(encoding="utf-8"))
+    data.update(fracture_gradient_pa_m=17_000.0, safety_factor=0.8)
+    path = tmp_path / "well-with-criterion.json"
+    path.write_text(json.dumps(data), encoding="utf-8")
+    return path
+
+
+def test_cli_uses_a_config_supplied_criterion_as_not_validated(tmp_path, capsys):
+    assert main(["--config", str(_config_with_criterion(tmp_path)), "--json"]) == 0
+    injectivity = json.loads(capsys.readouterr().out)["injectivity"]
+    assert injectivity["fracture_pressure_pa"] == pytest.approx(2450.0 * 17_000.0)
+    assert injectivity["output_status"]["fracture_pressure_pa"] == "NOT_VALIDATED"
+    assert injectivity["caller_supplied_criteria"] == {
+        "fracture_gradient_pa_m": 17_000.0, "safety_factor": 0.8}
 
 
 def test_cli_flag_overrides_a_config_value(capsys):
@@ -269,12 +304,17 @@ def test_cli_override_changes_the_physics_not_just_the_echo(capsys):
     assert richer > base
 
 
-def test_unoverridden_config_values_survive_an_override(capsys):
-    """Overriding one field must not reset the others to engine defaults."""
-    main(["--config", str(VALID), "--samples", "120", "--json"])
+def test_unoverridden_config_values_survive_an_override(tmp_path, capsys):
+    """Overriding one field must not reset the others to engine defaults.
+
+    Phase 14: the config carries its own (caller-supplied) fracture criterion,
+    since none has a default any more; its depth and gradient must survive.
+    """
+    main(["--config", str(_config_with_criterion(tmp_path)), "--samples", "120", "--json"])
     report = json.loads(capsys.readouterr().out)
-    assert report["injectivity"]["fracture_pressure_pa"] == pytest.approx(2450.0 * 15_000.0)
+    assert report["injectivity"]["fracture_pressure_pa"] == pytest.approx(2450.0 * 17_000.0)
     assert report["well_id"] == "WELL-001"
+    assert report["n_samples"] == 120
 
 
 def test_cli_rejects_an_override_that_is_physically_impossible(capsys):
@@ -337,12 +377,15 @@ def test_constant_inputs_get_zero_sensitivity_not_numerical_noise(capsys):
 
 
 def test_existing_flag_only_invocation_is_unaffected(capsys):
-    """No --config: the original behaviour and defaults must be untouched."""
+    """No --config: the flag-only invocation still runs with the engine defaults,
+    except the fracture criterion, which has no default (D1): its outputs are
+    UNAVAILABLE rather than computed from 15 000 Pa/m."""
     assert main(["--samples", "100", "--json"]) == 0
     report = json.loads(capsys.readouterr().out)
     assert report["well_id"] is None
     assert report["n_samples"] == 100
-    assert report["injectivity"]["fracture_pressure_pa"] == pytest.approx(2000.0 * 15_000.0)
+    assert report["injectivity"]["fracture_pressure_pa"] is None
+    assert report["injectivity"]["output_status"]["fracture_pressure_pa"] == "UNAVAILABLE"
 
 
 def test_round_trip_config_to_json_and_back(tmp_path):

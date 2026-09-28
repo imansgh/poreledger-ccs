@@ -45,6 +45,18 @@ export function WellDetail({
           <Value>{detail.depth_datum}</Value>
         </dd>
 
+        <dt>Approved-model depth reference</dt>
+        <dd>
+          <Value>
+            {detail.approved_model_depth_reference
+              ? detail.approved_model_depth_reference.status +
+                (detail.approved_model_depth_reference.diagnostic
+                  ? ` (${detail.approved_model_depth_reference.diagnostic})`
+                  : "")
+              : null}
+          </Value>
+        </dd>
+
         <dt>Temperature</dt>
         <dd>
           <Value>
@@ -69,7 +81,7 @@ export function WellDetail({
       {gross?.value !== undefined && gross?.value !== null ? (
         <p className="hint">
           Gross stratigraphic thickness is shown for context only. It is not used
-          as net reservoir thickness.
+          as net reservoir thickness or as the storage-assessment interval.
         </p>
       ) : null}
 

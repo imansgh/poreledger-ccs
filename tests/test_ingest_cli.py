@@ -150,3 +150,49 @@ def test_emit_configs_writes_only_screenable_wells(pilot_dir, tmp_path, capsys):
     written = sorted(p.name for p in out_dir.glob("*.json"))
     assert written
     assert not any("ASIGLIANO" in n for n in written), "blocked well must not emit a config"
+
+
+# -- Phase 14: owner decision O2 labels ---------------------------------------
+
+
+@pytest.mark.parametrize("args", [
+    ["--screen", "--scenario", "sensitivity", "--samples", "20"],
+    ["--screen", "--scenario", "literature", "--samples", "20"],
+    ["--compare-temperature", "--scenario", "sensitivity", "--well", "SALUZZO|1",
+     "--samples", "20"],
+    ["--scenario", "central"],
+])
+def test_legacy_outputs_are_labelled_not_validated(pilot_dir, capsys, args):
+    assert run(pilot_dir, *args, "--json") == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["validation_status"] == "NOT_VALIDATED"
+    assert "approved Model Contract" in payload["validation_note"]
+    assert run(pilot_dir, *args) == 0
+    assert capsys.readouterr().out.startswith("NOT_VALIDATED legacy output (owner decision O2)")
+
+
+def test_screen_wells_carry_the_label(pilot_dir, capsys):
+    run(pilot_dir, "--screen", "--scenario", "sensitivity", "--samples", "20", "--json")
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["funnel"]["validation_status"] == "NOT_VALIDATED"
+    assert all(w["validation_status"] == "NOT_VALIDATED" for w in payload["wells"])
+
+
+def test_completeness_report_alone_is_not_a_screening_result(pilot_dir, capsys):
+    """Plain completeness (no scenario, no screening) produces no capacity to label."""
+    run(pilot_dir, "--json")
+    assert "validation_status" not in json.loads(capsys.readouterr().out)
+
+
+def test_emitted_configs_are_labelled_not_validated(pilot_dir, tmp_path, capsys):
+    out_dir = tmp_path / "configs"
+    assert run(pilot_dir, "--scenario", "central", "--emit-configs", str(out_dir), "--json") == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["emitted_configs_validation_status"] == "NOT_VALIDATED"
+    assert run(pilot_dir, "--scenario", "central", "--emit-configs", str(out_dir)) == 0
+    assert "NOT_VALIDATED legacy inputs" in capsys.readouterr().out
+    # The emitted files stay strict ScreeningConfig documents.
+    from ccs_screen.config import ScreeningConfig
+
+    for path in out_dir.glob("*.json"):
+        ScreeningConfig.from_json_file(path)

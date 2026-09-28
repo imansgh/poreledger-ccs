@@ -12,6 +12,13 @@ docs/net-to-gross-semantics.md):
   ``==``, not ``approx``: approx would hide exactly the drift being guarded.
 - It is never inferred -- not from gross thickness, not from any record field.
 
+Phase 14. ``thickness_m`` and its net-to-gross disclosure belong to the
+NOT_VALIDATED legacy paths (owner decision O2), so the tests above the
+"approved model" section run the literature parameter set through the legacy
+resolver (its example JSON file) and are otherwise unchanged. On the approved
+model the ratio refers to ``h_g = z_base - z_top`` and is a consistency check
+only (A3, A7, S12); that is tested at the end.
+
 Runs against the synthetic pilot dataset, so it needs no access to ``data/``.
 """
 
@@ -20,6 +27,7 @@ from __future__ import annotations
 import dataclasses
 import inspect
 import math
+from pathlib import Path
 
 import pytest
 
@@ -33,7 +41,11 @@ from test_ingest_pipeline import PO_WELLS, POZZI_STORICI, _write_xlsx
 
 pytest.importorskip("openpyxl")
 
+ROOT = Path(__file__).resolve().parents[1]
+#: The literature parameter set through the legacy resolver (NOT_VALIDATED, O2).
+LEGACY_LITERATURE = str(ROOT / "examples" / "literature-screening-v1.json")
 VALID = {"area_m2": 8.0e7, "thickness_m": 35.0}
+APPROVED = {"area_m2": 8.0e7, "z_top": 1400.0, "z_base": 1527.0}
 NTG = {"low": 0.30, "high": 0.55, "net_criterion": "porosity_permeability",
        "net_basis": "log_derived"}
 CAPACITY_NUMBERS = ("p10", "p50", "p90", "mean", "n_samples", "deterministic")
@@ -61,6 +73,7 @@ def with_ntg(**overrides):
 
 def screen(data_dir, user_inputs=VALID, **kw):
     kw.setdefault("samples", 200)
+    kw.setdefault("scenario", LEGACY_LITERATURE)
     return api.screen_well("SALUZZO|1", user_inputs, data_dir=data_dir, **kw)
 
 
@@ -240,9 +253,12 @@ def test_compare_temperature_methods_discloses_the_same_way(data_dir):
 
 @pytest.mark.parametrize("user_inputs", [None, VALID])
 def test_screening_funnel_emits_no_ntg_warning_for_absence(data_dir, user_inputs):
-    payload = api.screening_funnel(user_inputs=user_inputs, data_dir=data_dir, samples=20)
+    payload = api.screening_funnel(scenario=LEGACY_LITERATURE, user_inputs=user_inputs,
+                                   data_dir=data_dir, samples=20)
     assert not any(c.startswith("net_to_gross") for c in codes(payload))
     assert "thickness_provenance" not in payload
+    approved = api.screening_funnel(data_dir=data_dir, samples=20)
+    assert not any(c.startswith("net_to_gross") for c in codes(approved))
 
 
 def test_input_free_endpoints_emit_no_ntg_warning(data_dir):
@@ -286,11 +302,12 @@ def test_ntg_is_not_an_assumption_and_not_assumable():
         Assumption(parameter="net_to_gross", value=0.4, author="x", rationale="y")
     assert not issubclass(api.NetToGross, Assumption)
     assert "net_to_gross" not in api.REQUIRED_USER_INPUTS
+    assert "net_to_gross" not in api.LEGACY_REQUIRED_USER_INPUTS
 
 
 def test_ntg_never_becomes_an_assumption_via_user_inputs():
     inputs = api.UserInputs.from_mapping(with_ntg())
-    assert [a.parameter for a in inputs.as_assumptions()] == list(api.REQUIRED_USER_INPUTS)
+    assert [a.parameter for a in inputs.as_assumptions()] == list(api.LEGACY_REQUIRED_USER_INPUTS)
 
 
 def test_ntg_does_not_enter_screening_inputs(data_dir):
@@ -387,18 +404,20 @@ def client(data_dir):
 
 
 def test_http_accepts_ntg_and_matches_python(client, data_dir):
-    body = {"user_inputs": with_ntg(), "samples": 200}
+    """Over HTTP only built-in scenarios are accepted: legacy = a placeholder."""
+    body = {"user_inputs": with_ntg(), "samples": 200, "scenario": "sensitivity"}
     over_http = client.post("/wells/SALUZZO|1/screen", json=body).json()
-    direct = screen(data_dir, with_ntg())
+    direct = screen(data_dir, with_ntg(), scenario="sensitivity")
     assert over_http["thickness_provenance"] == direct["thickness_provenance"]
     assert numbers(over_http) == numbers(direct)
 
 
 def test_http_without_ntg_matches_python(client, data_dir):
     over_http = client.post("/wells/SALUZZO|1/screen",
-                            json={"user_inputs": VALID, "samples": 200}).json()
+                            json={"user_inputs": VALID, "samples": 200,
+                                  "scenario": "sensitivity"}).json()
     assert over_http["thickness_provenance"]["declared"] is False
-    assert numbers(over_http) == numbers(screen(data_dir))
+    assert numbers(over_http) == numbers(screen(data_dir, scenario="sensitivity"))
 
 
 @pytest.mark.parametrize("bad", [
@@ -411,6 +430,75 @@ def test_http_without_ntg_matches_python(client, data_dir):
     {**NTG, "extra": 1},
 ])
 def test_http_rejects_malformed_ntg(client, bad):
-    resp = client.post("/wells/SALUZZO|1/screen",
-                       json={"user_inputs": {**VALID, "net_to_gross": bad}, "samples": 50})
-    assert resp.status_code in (400, 422)
+    for inputs in (VALID, APPROVED):
+        resp = client.post("/wells/SALUZZO|1/screen",
+                           json={"user_inputs": {**inputs, "net_to_gross": bad}, "samples": 50})
+        assert resp.status_code in (400, 422)
+
+
+# -- approved model (A3, A7, S12) --------------------------------------------
+
+
+@pytest.fixture
+def ground_level(data_dir, monkeypatch):
+    from ccs_screen.ingest.units import DepthDatum
+
+    records = []
+    for record in api.load_records(data_dir):
+        if record.canonical_id == "SALUZZO|1":
+            record = dataclasses.replace(
+                record, depth_datum=DepthDatum.GROUND_LEVEL,
+                temperatures=tuple(dataclasses.replace(o, depth_datum=DepthDatum.GROUND_LEVEL)
+                                   for o in record.temperatures))
+        records.append(record)
+    frozen = tuple(records)
+    monkeypatch.setattr(api, "load_records", lambda *_a, **_k: frozen)
+    return data_dir
+
+
+def approved(data_dir, user_inputs=APPROVED, **kw):
+    kw.setdefault("samples", 300)
+    kw.setdefault("seed", 42)
+    return api.screen_well("SALUZZO|1", user_inputs, data_dir=data_dir, **kw)
+
+
+@pytest.mark.parametrize("ntg", [
+    NTG,
+    {**NTG, "low": 0.05, "high": 0.05},
+    {**NTG, "low": 0.9, "high": 1.0, "net_basis": "unknown", "net_criterion": "unspecified"},
+])
+def test_approved_ntg_is_a_check_only_and_changes_nothing(ground_level, ntg):
+    """A4, S12: the gross-to-net reduction lives inside E; NTG never enters."""
+    without = approved(ground_level)
+    declared = approved(ground_level, {**APPROVED, "net_to_gross": ntg})
+    assert declared["water_level_scenarios"] == without["water_level_scenarios"]
+    assert declared["storage_interval"] == without["storage_interval"]
+    check = declared["net_to_gross_check"]
+    assert check["used_in_calculation"] is False
+    assert check["net_to_gross"]["used_in_calculation"] is False
+    assert check["relative_to"] == "h_g = z_base - z_top"
+    assert check["consistency"] == "0 < h_net <= h_g holds by construction"
+
+
+def test_approved_ntg_definition_refers_to_the_interval(ground_level):
+    check = approved(ground_level, {**APPROVED, "net_to_gross": NTG})["net_to_gross_check"]
+    definition = check["net_to_gross"]["definition"]
+    assert "h_net / h_g" in definition and "Not identified with DOE hn/hg" in definition
+    assert "divided" in check["usage"]
+
+
+def test_approved_path_emits_no_ntg_warning(ground_level):
+    """The Finding 9.1 double count cannot arise on the approved path (A4)."""
+    for body in (APPROVED, {**APPROVED, "net_to_gross": {**NTG, "low": 0.4, "high": 0.4}}):
+        assert not any(c.startswith("net_to_gross") for c in codes(approved(ground_level, body)))
+
+
+def test_approved_absent_ntg_is_reported_as_not_declared(ground_level):
+    check = approved(ground_level)["net_to_gross_check"]
+    assert check["declared"] is False and check["net_to_gross"] is None
+
+
+def test_approved_malformed_ntg_blocks(data_dir):
+    payload = approved(data_dir, {**APPROVED, "net_to_gross": 0.4})
+    assert payload["status"] == "blocked"
+    assert "net_to_gross must be an object" in payload["error"]
