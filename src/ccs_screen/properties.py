@@ -26,10 +26,23 @@ Two details matter for CCS screening and are handled explicitly here:
    degrades above 20 MPa, where a constant shift over-corrects -- at
    35 MPa / 300 K it turns a +3.8% error into +11.8%.
 
-   It is kept because most Italian pilot reservoirs sit below 20 MPa, but this
-   is a screening-grade compromise, not an accuracy improvement everywhere.
-   Flagged REVIEW REQUIRED in the Phase 1 audit; a temperature-dependent shift
-   is the standard remedy and has not been implemented.
+   It is kept by owner decision E1 of the Phase 13 Model Contract
+   (``docs/phase13-owner-decision-record.md``), together with a declared and
+   enforced operating envelope (see ``VALIDATED_ENVELOPE_PRESSURE_PA`` and
+   ``VALIDATED_ENVELOPE_TEMPERATURE_K``). The earlier justification -- that
+   most Italian pilot reservoirs sit below 20 MPa -- is not supported: the
+   audit found 14 of 45 pilot wells below 20 MPa under the pre-Phase-13 state
+   definition (Finding 11.1; decision E2). This is a screening-grade
+   compromise, not an accuracy improvement everywhere. Flagged REVIEW REQUIRED
+   in the Phase 1 audit; a temperature-dependent shift is the standard remedy
+   and has not been implemented.
+
+3. **Validated operating envelope.** 1-35 MPa and 280-400 K, the Phase 1
+   comparison range (E1, M4). The approved model checks it on the absolute EOS
+   pressure for every Monte Carlo realisation and blocks validated outputs when
+   any realisation lies outside it. ``co2_density_kg_m3`` itself still
+   evaluates such states: outside the validated envelope is not the same as
+   physically impossible.
 """
 
 from __future__ import annotations
@@ -44,6 +57,11 @@ CO2_MW_KG_MOL = 0.0440095
 
 # Rackett compressibility for CO2, used by the Peneloux volume shift.
 CO2_Z_RA = 0.2722
+
+#: Validated operating envelope (E1, M4; closed bounds). Pressure is the
+#: absolute EOS pressure P_EOS = P_gauge + P_atm, never gauge pressure (C1).
+VALIDATED_ENVELOPE_PRESSURE_PA = (1.0e6, 35.0e6)
+VALIDATED_ENVELOPE_TEMPERATURE_K = (280.0, 400.0)
 
 SQRT2 = math.sqrt(2.0)
 

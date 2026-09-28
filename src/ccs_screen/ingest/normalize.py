@@ -61,6 +61,11 @@ DEPTH_CONFLICT_TOLERANCE_M = 1.0
 #: A temperature counts as reservoir temperature when it sits within this
 #: fraction of total depth. Shallow modelled points (300/500/1000 m grid) are
 #: not reservoir conditions.
+#:
+#: Legacy paths only (owner decision O2). The 0.85 filter is not an established
+#: physical threshold and is not part of the approved Model Contract (S3); the
+#: approved model selects temperature by the M3/R1 rule in
+#: ``ccs_screen.approved_model`` and never reads ``record.temperature_k``.
 RESERVOIR_DEPTH_FRACTION = 0.85
 
 
@@ -353,6 +358,11 @@ class WellNormalizer:
         )
 
     def _derive_temperature(self, rec: NormalizedWellRecord) -> None:
+        """Ingestion-time temperature for the legacy paths (O2; NOT_VALIDATED).
+
+        Uses the 0.85 near-total-depth filter and TEMPERATURE_METHOD_RANK. The
+        approved model does not use this value (S2, S3, M3).
+        """
         if not rec.temperatures:
             return
         reservoir = [t for t in rec.temperatures

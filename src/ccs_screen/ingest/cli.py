@@ -9,6 +9,13 @@
 The interface stays flat on purpose. Screening is a mode of the same pipeline,
 not a separate program, and a subcommand tree would add ceremony without adding
 capability.
+
+Every screening output of this command -- ``--screen``, ``--compare-temperature``,
+``--list-incomplete``, ``--emit-configs``, and any run under ``--scenario`` or
+``--assumptions`` -- comes from the legacy scenario resolver, not the approved
+Model Contract. By owner decision O2 the behaviour is unchanged and the output
+is labelled ``NOT_VALIDATED``. The approved model is served by
+``ccs_screen.api`` and the HTTP API.
 """
 
 from __future__ import annotations
@@ -35,8 +42,19 @@ from ccs_screen.ingest.report import (
 from ccs_screen.ingest.scenario import (
     BUILTIN_SCENARIOS,
     NO_SCENARIO,
+    NOT_VALIDATED,
+    NOT_VALIDATED_STATEMENT,
     ScreeningScenario,
     load_scenario,
+)
+
+#: The legacy modes whose output carries the O2 label.
+LEGACY_MODE_FLAGS = ("screen", "compare_temperature", "list_incomplete", "emit_configs",
+                     "scenario", "assumptions")
+
+EMITTED_CONFIGS_NOTE = (
+    "Emitted ScreeningConfig files are NOT_VALIDATED legacy inputs (owner decision O2): "
+    "they carry the legacy scenario's values, not the approved Model Contract."
 )
 
 
@@ -44,7 +62,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="ccs-ingest",
         description="Normalize structured well sources, report completeness, and screen.",
-        epilog="Reads only the structured sources; the scanned PDF corpus is never touched.",
+        epilog=("Reads only the structured sources; the scanned PDF corpus is never touched. "
+                "Screening, comparison and emitted-config outputs use the legacy scenario "
+                "resolver and are NOT_VALIDATED (owner decision O2)."),
     )
     parser.add_argument("--data-dir", default="data", help="directory holding the structured sources")
     parser.add_argument("--well", help="show one canonical well id in full")
@@ -116,6 +136,11 @@ def main(argv: list[str] | None = None) -> int:
 
         payload["scenario"] = scenario.to_dict()
         payload["raw_records"] = len(normalizer.raw_records)
+        if any(getattr(args, flag) for flag in LEGACY_MODE_FLAGS):
+            payload["validation_status"] = NOT_VALIDATED
+            payload["validation_note"] = NOT_VALIDATED_STATEMENT
+            out_lines += [f"{NOT_VALIDATED} legacy output (owner decision O2): not the "
+                          f"approved Model Contract.", ""]
 
         if args.compare_temperature:
             targets = [by_id[args.well]] if args.well else records
@@ -186,9 +211,11 @@ def main(argv: list[str] | None = None) -> int:
                 (out / f"{name}.json").write_text(json.dumps(body, indent=2), encoding="utf-8")
                 written.append(str(out / f"{name}.json"))
             payload["emitted_configs"] = written
+            payload["emitted_configs_validation_status"] = NOT_VALIDATED
             payload["refused_wells"] = refused
-            out_lines += ["", f"ScreeningConfigs written : {len(written)}",
-                          f"Wells refused            : {len(refused)}"]
+            out_lines += ["", f"ScreeningConfigs written : {len(written)} ({NOT_VALIDATED})",
+                          f"Wells refused            : {len(refused)}",
+                          EMITTED_CONFIGS_NOTE]
 
     except (ValueError, AssumptionError) as exc:
         print(f"ccs-ingest: {exc}", file=sys.stderr)

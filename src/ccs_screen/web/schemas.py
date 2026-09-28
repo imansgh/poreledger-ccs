@@ -11,17 +11,24 @@ response payloads against the declared model, so an over-tight schema would
 *silently delete* provenance fields and quietly break the audit contract. The
 shapes that must never be filtered are declared as ``dict[str, Any]`` and a
 test asserts the HTTP payload still matches the Python one key for key.
+
+Screening responses are a union discriminated by ``model_path``: the approved
+model (``APPROVED_MODEL``) and the NOT_VALIDATED legacy scenarios
+(``LEGACY_NOT_VALIDATED``) each validate against their own model, so neither
+path acquires the other's fields.
 """
 
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Annotated, Any, Literal, Union
 
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, model_validator
 
 from ccs_screen.api import (
+    APPROVED_MODEL_PATH,
     DEFAULT_SAMPLES,
     DEFAULT_SCENARIO,
+    LEGACY_MODEL_PATH,
     MAX_SAMPLES,
     MIN_SAMPLES,
 )
@@ -62,10 +69,16 @@ class NetToGrossModel(BaseModel):
 
 
 class UserInputsModel(BaseModel):
-    """The two geological inputs the caller must supply.
+    """The geological inputs the caller must supply.
 
-    No defaults. Both have no source data and no literature range, so a default
-    here would be a hidden geological assumption presented as a result.
+    No defaults. None of these has source data or a literature range, so a
+    default here would be a hidden geological assumption presented as a result.
+
+    ``area_m2`` is required on every path. Which of the others is required
+    depends on the scenario, so the API validates the combination: the approved
+    model (``literature-screening-v1``) takes ``z_top`` and ``z_base`` and
+    rejects ``thickness_m``; the NOT_VALIDATED legacy scenarios take
+    ``thickness_m``. A mismatch comes back ``blocked`` with the reason.
     """
 
     model_config = _STRICT
@@ -77,17 +90,37 @@ class UserInputsModel(BaseModel):
                      "boundaries, concession polygons, well spacing or a radius."),
         json_schema_extra={"example": 8.0e7},
     )
-    thickness_m: float = Field(
-        ...,
+    z_top: float | None = Field(
+        default=None,
+        ge=0,
+        allow_inf_nan=False,
+        description=("Approved model: top of the designated storage-assessment "
+                     "interval, m below ground level, in the same depth coordinate "
+                     "and datum as the well's depth_m. Never inferred."),
+        json_schema_extra={"example": 1400.0},
+    )
+    z_base: float | None = Field(
+        default=None,
         gt=0,
-        description=("Net storage thickness in m -- not the gross "
-                     "chronostratigraphic interval."),
+        allow_inf_nan=False,
+        description=("Approved model: base of the designated storage-assessment "
+                     "interval (z_base > z_top), same coordinate and datum. "
+                     "h_g = z_base - z_top is derived."),
+        json_schema_extra={"example": 1500.0},
+    )
+    thickness_m: float | None = Field(
+        default=None,
+        gt=0,
+        description=("NOT_VALIDATED legacy scenarios only: net storage thickness in "
+                     "m -- not the gross chronostratigraphic interval. Rejected by "
+                     "the approved model."),
         json_schema_extra={"example": 35.0},
     )
     net_to_gross: NetToGrossModel | None = Field(
         default=None,
-        description=("Optional: the net-to-gross that thickness_m implies. "
-                     "Recorded for provenance; not used in any calculation."),
+        description=("Optional provenance metadata; never used in any calculation. "
+                     "Approved model: h_net / h_g, a consistency check only. Legacy: "
+                     "the net-to-gross that thickness_m implies."),
     )
 
 
@@ -134,7 +167,13 @@ class HealthResponse(BaseModel):
 
 
 class InterpretationModel(BaseModel):
-    """Never let a capacity number travel without this."""
+    """Never let a capacity number travel without this.
+
+    Path-specific policy keys (``net_thickness_policy`` on legacy paths;
+    ``storage_interval_policy``, ``percentile_interpretation`` and
+    ``joint_scenario_methodology`` on the approved model) pass through as
+    extras, so neither path acquires the other's keys.
+    """
 
     model_config = ConfigDict(extra="allow")
 
@@ -145,7 +184,6 @@ class InterpretationModel(BaseModel):
     basis: str
     statement: str
     area_policy: str
-    net_thickness_policy: str
     warnings: list[dict[str, Any]] = Field(default_factory=list)
 
 
@@ -160,6 +198,8 @@ class WellSummary(BaseModel):
     operator: str | None
     outcome: str | None
     screenable_without_user_inputs: bool
+    depth_datum: str
+    approved_model_depth_reference: dict[str, Any]
 
 
 class CapacityModel(BaseModel):
@@ -180,8 +220,28 @@ class CapacityModel(BaseModel):
     uncertainty_band: dict[str, Any] | None = None
 
 
-class ScreenResponse(BaseModel):
-    """The screening result.
+class ApprovedScreenResponse(BaseModel):
+    """The approved-model result: both named water-level scenarios.
+
+    Only the keys every approved payload carries are declared. The rest --
+    ``storage_interval``, ``depth_reference``, ``temperature_selection``,
+    ``water_level_scenarios`` (each with ``validation_status``,
+    ``validated_percentiles``, ``capacity_mt``, ``diagnostic_capacity_mt`` and
+    ``diagnostics``), ``systematic_effect``, ``sampled_inputs``,
+    ``model_constants`` -- pass through untouched as extras.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    model_path: Literal["APPROVED_MODEL"]
+    status: Literal["evaluated", "blocked"]
+    well_id: str
+    scenario: dict[str, Any]
+    interpretation: InterpretationModel
+
+
+class LegacyScreenResponse(BaseModel):
+    """A NOT_VALIDATED legacy screening result (owner decision O2).
 
     ``screening_inputs`` stays an open mapping so every provenance field
     (value, unit, provenance, evidence_class, assumed, label, rationale,
@@ -190,6 +250,8 @@ class ScreenResponse(BaseModel):
 
     model_config = ConfigDict(extra="allow")
 
+    model_path: Literal["LEGACY_NOT_VALIDATED"]
+    validation_status: Literal["NOT_VALIDATED"]
     status: Literal["screened", "blocked"]
     well_id: str
     scenario: dict[str, Any]
@@ -218,10 +280,25 @@ class ScreenResponse(BaseModel):
     required_user_inputs: list[dict[str, Any]] | None = None
 
 
+#: POST /wells/{well_id}/screen returns one of the two, selected by model_path.
+ScreenResponse = Annotated[
+    Union[ApprovedScreenResponse, LegacyScreenResponse],
+    Field(discriminator="model_path"),
+]
+
+#: The discriminator values, restated for the consistency test against the API.
+SCREEN_RESPONSE_PATHS = {APPROVED_MODEL_PATH: ApprovedScreenResponse,
+                         LEGACY_MODEL_PATH: LegacyScreenResponse}
+
+
 class TemperatureResponse(BaseModel):
+    """The temperature-method comparison: a NOT_VALIDATED legacy diagnostic."""
+
     model_config = ConfigDict(extra="allow")
 
     status: str
+    model_path: Literal["LEGACY_NOT_VALIDATED"]
+    validation_status: Literal["NOT_VALIDATED"]
     well_id: str | None = None
     selected_method: str | None = None
     variants: list[dict[str, Any]] = Field(default_factory=list)
