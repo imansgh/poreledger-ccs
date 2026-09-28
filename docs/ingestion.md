@@ -159,6 +159,17 @@ so shallow modelled grid points (300/500/1000 m) cannot outrank a reading at TD.
 A well whose only record is a surface air mean gets `temperature_k` **missing**,
 because an annual air temperature is not a reservoir temperature.
 
+This ingestion-time selection (the rank table and the 85% window) feeds the
+legacy screening paths only, which are `NOT_VALIDATED` (Phase 14, owner decision
+O2). The approved model never reads `temperature_k`: it selects one corrected
+observation (Horner-corrected, Fertl-Wichmann or Squarci-Taffi) inside the
+caller's storage interval, nearest the state point, with the Model Contract's
+tie rules, no ranking and no 85% window, and excludes observations below the
+recorded total depth (`ccs_screen.approved_model.select_temperature`). Each
+`TemperatureObservation` carries a `depth_datum`, which ingestion leaves
+`unknown` because no source states it; under the approved model an observation
+qualifies only with an established ground-level reference.
+
 Competing values at the same depth are recorded as a `Conflict`. This matters
 quantitatively: choosing the unstabilised over the extrapolated value changes CO2
 density -- and therefore capacity, which is linear in density -- by **6.4% to
@@ -181,6 +192,13 @@ the result would look entirely plausible.
 `gross_thickness_m` is therefore a separate field, and **no code path converts it
 to `thickness_m`**. `ScreeningConfig.thickness_m` is left unrenamed for now; the
 real gap is the absent net-to-gross ratio, not the field name.
+
+The approved model (Phase 13 Model Contract) uses none of these three as an
+input. Its thickness term is `h_g = z_base - z_top`, the gross thickness of a
+storage-assessment interval the caller designates explicitly, in the same depth
+coordinate and datum as `depth_m`; it is never inferred from total depth or
+from the logged stratigraphic units. `thickness_m` remains the net-thickness
+input of the `NOT_VALIDATED` legacy paths.
 
 ## Provenance model
 
@@ -287,6 +305,14 @@ assumptions fill holes only.
 | `central` | point values, mid | **placeholder** | deterministic base case |
 | `sensitivity` | ranges | **placeholder** | exercises uncertainty propagation |
 
+Phase 14 (owner decision O2): everything `ccs-ingest` screens runs the legacy
+scenario resolver documented here -- including `literature-screening-v1` and any
+scenario or assumption JSON file -- and its output is labelled
+`NOT_VALIDATED`. The placeholder descriptions say so. In the public Python and
+HTTP API, `literature-screening-v1` instead runs the approved model (see
+`README.md` and `docs/http-api.md`); the placeholders and JSON files remain
+`NOT_VALIDATED` there too.
+
 ### literature-screening-v1
 
 The one scenario whose values are traceable. See
@@ -295,14 +321,14 @@ review, including what the literature does *not* support.
 
 | Parameter | Value | Evidence class | Source |
 | --- | --- | --- | --- |
-| `storage_efficiency` | 0.01 - 0.04 | generic | CSLF-T-2008-04 (Bachu, 2008), P15-P85 for deep saline aquifers |
+| `storage_efficiency` | 0.01 - 0.04 | generic | CSLF-T-2008-04 (Bachu, 2008), P15-P85 for deep saline aquifers; a project-defined Uniform prior over those bounds (see scenario-literature-review.md) |
 | `porosity` | 0.10 - 0.35 | regional | Donda et al. (2011) IJGGC 5(2) 327-335, Table 2, 13 Italian reservoirs |
 | `pressure_pa` | derived | generic | P = rho*g*z from **source depth**, rho = 1020-1100 kg/m3 |
 | `area_m2` | **not supplied** | unsupported | explicit user input; see area policy |
 | `thickness_m` | **not supplied** | unsupported | explicit user input; see net-thickness policy |
 
-Applied alone it screens **nothing**: every well blocks on `area_m2` and
-`thickness_m`. That is the intended behaviour. `examples/` ships both the bare
+Applied alone through the legacy resolver it screens **nothing**: every well
+blocks on `area_m2` and `thickness_m`. That is the intended behaviour. `examples/` ships both the bare
 scenario and a worked one that adds those two as clearly-labelled user inputs.
 
 Nothing in it is site-specific. No value was measured in any pilot well.
@@ -384,6 +410,14 @@ ccs-ingest --data-dir data --compare-temperature --well "TRECATE|9|ST"
 
 `--assumptions` still works: a bare assumption set is wrapped into an ad-hoc
 scenario rather than rejected.
+
+Every screening mode (`--screen`, `--compare-temperature`, `--list-incomplete`,
+`--emit-configs`, and any run under `--scenario` or `--assumptions`) prints a
+`NOT_VALIDATED legacy output (owner decision O2)` header, and its JSON carries
+`validation_status: "NOT_VALIDATED"`. Emitted config files stay strict
+`ScreeningConfig` documents, so the label is reported on stdout and as
+`emitted_configs_validation_status`. The plain completeness report produces no
+capacity and carries no label.
 
 ## Calling from Python (future web API)
 

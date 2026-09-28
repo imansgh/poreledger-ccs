@@ -86,6 +86,11 @@ choosing.
 - It is calibrated against a **basin- or aquifer-scale area**, not a structural
   closure. Section 8 explains why that forbids mixing it with a closure area.
 
+**Statistical interpretation (Model Contract A6).** The scenario samples E from
+Uniform(0.01, 0.04). The Uniform distribution is a project-defined prior over the DOE-derived P15–P85 bounds. It is not claimed to reproduce the DOE probability distribution.
+E is the aggregate DOE-style storage efficiency, containing the gross-to-net
+term (A4, A5); it is never divided by a net-to-gross ratio.
+
 ### porosity = 0.10 to 0.35
 
 Donda et al. (2011), Table 2, "Key parameters of the Italian potential
@@ -265,3 +270,30 @@ Correct terminology for anything produced under this scenario: **screening
 scenario**, **scenario-based capacity**, **literature-constrained screening**.
 Never *proven storage capacity*, *site capacity*, or *certified CO2 storage
 resource*.
+
+## 11. Phase 14: use in the approved model
+
+The Phase 13 Model Contract (`docs/phase13-owner-decision-record.md`) adopts
+the ranges reviewed here as the approved Monte Carlo priors: storage efficiency
+Uniform(0.01, 0.04) (A6, statement above), porosity Uniform(0.10, 0.35)
+(PROVISIONAL) and brine density Uniform(1020, 1100) kg/m3 (PROVISIONAL; a
+declared project assumption, no primary source adopted, section 4). No value in
+this review is changed.
+
+In the public API, `literature-screening-v1` runs the approved model, which
+differs from the scenario resolver described above in three places that are
+contract decisions, not literature findings:
+
+- Thickness: the caller supplies the storage-assessment interval (`z_top`,
+  `z_base`); the thickness term is the derived gross `h_g = z_base - z_top`,
+  not a net thickness (A1, M1). Sections 7 and 9 describe the net-thickness
+  input of the legacy resolver.
+- Pressure: `P_EOS = 101325 Pa + rho_brine * g * (z_state - z_wl)` at the
+  interval midpoint `z_state`, for two named water-level scenarios
+  (`GROUND_REFERENCE`, `SEA_LEVEL_SENSITIVITY`), instead of `rho * g * depth`
+  at total depth (B1, M2, S1).
+- Temperature: one corrected observation inside the interval, selected by the
+  contract's rule (M3, R1), instead of the ingestion-time selection.
+
+Applied through the legacy resolver (`ccs-ingest`, scenario JSON files) the
+scenario behaves as documented above and its outputs are `NOT_VALIDATED`.

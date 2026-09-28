@@ -383,3 +383,28 @@ inspection. Section 10's measurement is from the B-prime control experiment.
 is fact. Everything else -- the canonical definition, the two enums, the
 carbonate resolution, the domain and the field layout -- is **this
 specification's proposal**, and none of it is implemented.
+
+## Phase 14 addendum: the approved model
+
+*Added in Phase 14. The specification above is unchanged and continues to
+describe the `NOT_VALIDATED` legacy paths, where `thickness_m` is a caller net
+thickness.*
+
+The Phase 13 Model Contract (`docs/phase13-owner-decision-record.md`) changes
+what the ratio refers to on the approved model, without adding any number:
+
+- There is no `thickness_m` input. The thickness term is `h_g = z_base - z_top`,
+  the gross thickness of the caller-designated storage-assessment interval
+  (A1, M1).
+- A declared `net_to_gross` is read as `h_net / h_g` for that interval. It is a
+  consistency/provenance check only (S12): with `0 < net_to_gross <= 1`,
+  `0 < h_net <= h_g` holds by construction. It is reported in
+  `net_to_gross_check` with `used_in_calculation: false`.
+- It never enters the capacity equation: the gross-to-net reduction is
+  represented inside the aggregate storage efficiency E (A4, A5), and E is never
+  divided by it.
+- It is not identified with DOE `hn/hg` (A3), and no Piemonte value is
+  introduced (numerical NTG remains evidence-blocked).
+- The `net_to_gross_not_declared` and `net_to_gross_point_value` advisories do
+  not apply on the approved model, where the Finding 9.1 double count cannot
+  arise by construction.
