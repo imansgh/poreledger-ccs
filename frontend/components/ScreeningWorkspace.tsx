@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { InputForm } from "./InputForm";
 import { Notice } from "./Notice";
-import { ProvenancePanel } from "./ProvenancePanel";
+import { ApprovedInputsPanel, ProvenancePanel } from "./ProvenancePanel";
 import { ResultPanel } from "./ResultPanel";
 import { ResultSkeleton } from "./ResultSkeleton";
 import { TemperaturePanel } from "./TemperaturePanel";
@@ -30,6 +30,7 @@ import type {
   WellDetail as WellDetailType,
   WellSummary,
 } from "@/lib/types";
+import { isApproved } from "@/lib/types";
 
 const DEFAULT_SCENARIO = "literature-screening-v1";
 
@@ -39,8 +40,13 @@ function messageFor(error: unknown): string {
 }
 
 /**
- * Orchestrates the workflow: pick a well, read its source data, supply the two
+ * Orchestrates the workflow: pick a well, read its source data, supply the
  * inputs the backend will not invent, screen, then read the provenance.
+ *
+ * Which inputs are collected is decided by the API's required-inputs list for
+ * the selected scenario: area_m2, z_top, z_base on the approved model; area_m2
+ * and thickness_m on a NOT_VALIDATED legacy scenario. The workspace collects
+ * them, calls the API and renders what comes back; it derives nothing.
  *
  * State is deliberately flat. A previous result is cleared the moment the
  * selected well changes, so a number can never be read against the wrong well.
@@ -127,6 +133,15 @@ export function ScreeningWorkspace() {
     }
   }
 
+  // A scenario is legacy when the API says so; until the required inputs have
+  // loaded, fall back to the scenario list's own validation status.
+  const activeScenario = scenarios.find(
+    (s) => s.name === scenario || s.aliases.includes(scenario),
+  );
+  const isLegacy = inputs
+    ? inputs.model_path === "LEGACY_NOT_VALIDATED"
+    : activeScenario?.validation_status === "NOT_VALIDATED";
+
   async function runScreening(values: UserInputValues) {
     if (!selectedId) return;
     const gen = generation.current;
@@ -211,9 +226,10 @@ export function ScreeningWorkspace() {
             <InputForm
               scenarios={scenarios}
               scenario={scenario}
+              required={inputs ? inputs.required : null}
               onScenarioChange={changeScenario}
               onSubmit={runScreening}
-              onCompareTemperature={runTemperatureComparison}
+              onCompareTemperature={isLegacy ? runTemperatureComparison : null}
               busy={busy}
               disabled={!selectedId}
             />
@@ -225,10 +241,13 @@ export function ScreeningWorkspace() {
             <section className="panel">
               <h2>Getting started</h2>
               <p className="bucket-desc">
-                Select a well, then supply a storage area and a net reservoir
-                thickness. Neither has a default: the source data does not
-                contain them and no literature range covers them, so this tool
-                will not invent either one.
+                Select a well, then supply the inputs the selected scenario
+                requires. The approved model needs a storage area and the
+                storage-assessment interval (z_top, z_base); a NOT_VALIDATED
+                legacy scenario needs a storage area and a net reservoir
+                thickness. None has a default: the source data does not contain
+                them and no literature range covers them, so this tool will not
+                invent any of them.
               </p>
             </section>
           ) : null}
@@ -239,8 +258,11 @@ export function ScreeningWorkspace() {
             <WarningsPanel interpretation={result.interpretation} />
           ) : null}
           {!busy && comparison ? <TemperaturePanel comparison={comparison} /> : null}
-          {!busy && result && result.status === "screened" ? (
+          {!busy && result && !isApproved(result) && result.status === "screened" ? (
             <ProvenancePanel result={result} />
+          ) : null}
+          {!busy && result && isApproved(result) && result.status === "evaluated" ? (
+            <ApprovedInputsPanel result={result} />
           ) : null}
         </div>
       </div>

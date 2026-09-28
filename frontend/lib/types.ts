@@ -58,6 +58,18 @@ export interface InterpretationWarning {
   reference?: string;
 }
 
+/**
+ * The two screening paths the backend exposes. The approved model implements
+ * the owner-approved Model Contract; every legacy path is NOT_VALIDATED.
+ */
+export type ModelPath = "APPROVED_MODEL" | "LEGACY_NOT_VALIDATED";
+
+/** Per-scenario status on the approved model. Legacy results are NOT_VALIDATED. */
+export type ScenarioValidationStatus =
+  | "VALIDATED"
+  | "OUTSIDE_VALIDATED_ENVELOPE"
+  | "UNAVAILABLE";
+
 export interface Interpretation {
   type: "scenario_based_capacity";
   site_specific: false;
@@ -66,8 +78,27 @@ export interface Interpretation {
   basis: string;
   statement: string;
   area_policy: string;
-  net_thickness_policy: string;
+  /** Legacy paths only. */
+  net_thickness_policy?: string;
+  /** Approved model only. */
+  storage_interval_policy?: string;
+  percentile_interpretation?: string;
+  joint_scenario_methodology?: string;
   warnings: InterpretationWarning[];
+}
+
+/** One machine-readable reason attached by the approved model. */
+export interface Diagnostic {
+  code: string;
+  message: string;
+  [detail: string]: unknown;
+}
+
+export interface DepthReferenceStatus {
+  depth_datum: string;
+  status: "AVAILABLE" | "UNAVAILABLE";
+  diagnostic: string | null;
+  message: string | null;
 }
 
 export interface Capacity {
@@ -88,6 +119,8 @@ export interface WellSummary {
   operator: string | null;
   outcome: string | null;
   screenable_without_user_inputs: boolean;
+  depth_datum?: string;
+  approved_model_depth_reference?: DepthReferenceStatus;
 }
 
 export interface FieldValue {
@@ -112,6 +145,7 @@ export interface WellDetail {
   n_temperature_observations: number;
   conflicts: string[];
   required_user_inputs: string[];
+  approved_model_depth_reference?: DepthReferenceStatus;
   interpretation: Interpretation;
 }
 
@@ -122,16 +156,22 @@ export interface RequiredInputSpec {
   description: string;
   policy: string;
   not_inferred_from: string[];
-  minimum_exclusive: number;
+  minimum_exclusive?: number;
+  minimum_inclusive?: number;
+  must_exceed?: string;
+  model_path?: ModelPath;
   needed?: boolean;
 }
 
 export interface RequiredInputs {
   well_id: string;
   scenario: { name: string; version: string };
+  model_path?: ModelPath;
+  validation_status?: "NOT_VALIDATED";
   required: RequiredInputSpec[];
   blocked_by_missing_source_data: { field: string; reason: string }[];
   can_be_screened_with_user_inputs: boolean;
+  depth_reference?: DepthReferenceStatus;
   interpretation: Interpretation;
 }
 
@@ -144,7 +184,10 @@ export interface TemperatureDetail {
   alternatives: { value_k: number; source: string }[];
 }
 
-export interface ScreenResult {
+/** A NOT_VALIDATED legacy screening result (placeholder scenarios). */
+export interface LegacyScreenResult {
+  model_path: "LEGACY_NOT_VALIDATED";
+  validation_status: "NOT_VALIDATED";
   status: "screened" | "blocked";
   well_id: string;
   scenario: { name: string; version: string; date?: string; applied_as?: string };
@@ -166,6 +209,126 @@ export interface ScreenResult {
   missing_reasons?: Record<string, string> | null;
 }
 
+/** Validated percentiles of one named scenario; present only when VALIDATED. */
+export interface ApprovedCapacity {
+  p10: number;
+  p50: number;
+  p90: number;
+  mean: number;
+  n_samples: number;
+  validation_status: "VALIDATED";
+  interpretation?: string;
+}
+
+export interface EnvelopeCheck {
+  pressure_pa: [number, number];
+  temperature_k: [number, number];
+  n_realisations: number;
+  n_outside: number;
+  n_pressure_below_envelope: number;
+  n_pressure_above_envelope: number;
+  temperature_inside: boolean;
+  all_inside: boolean;
+  realisations_discarded: number;
+}
+
+/** One named water-level scenario of the approved model. */
+export interface WaterLevelScenarioResult {
+  name: "GROUND_REFERENCE" | "SEA_LEVEL_SENSITIVITY";
+  role: "baseline" | "sensitivity";
+  label: string;
+  description: string;
+  z_wl_definition: string;
+  validation_status: ScenarioValidationStatus;
+  validated_percentiles: "REPORTED" | "BLOCKED" | "UNAVAILABLE";
+  z_wl_m: number | null;
+  z_state_m: number | null;
+  pressure_eos_pa: { low: number; high: number; unit: string } | null;
+  temperature_k: number | null;
+  envelope: EnvelopeCheck | null;
+  capacity_mt: ApprovedCapacity | null;
+  /** NOT_VALIDATED diagnostic numbers. The UI never displays them. */
+  diagnostic_capacity_mt: Record<string, unknown> | null;
+  diagnostics: Diagnostic[];
+}
+
+export interface TemperatureSelection {
+  status: "AVAILABLE" | "UNAVAILABLE";
+  evaluated: boolean;
+  temperature_k: number | null;
+  selected_observation: {
+    depth_m: number;
+    temperature_k: number;
+    method: string;
+  } | null;
+  diagnostics: Diagnostic[];
+}
+
+export interface StorageIntervalResult {
+  status: "AVAILABLE" | "UNAVAILABLE";
+  z_top_m: number;
+  z_base_m: number;
+  h_g_m: number | null;
+  z_state_m: number | null;
+  state_point_convention: string;
+  diagnostics: Diagnostic[];
+}
+
+export interface SystematicEffect {
+  methodology: string;
+  baseline: string;
+  individual_effects: {
+    effect: string;
+    contrast: string;
+    status: "AVAILABLE" | "UNAVAILABLE";
+    p50_difference_mt: number | null;
+    reason: string | null;
+    is_correction: false;
+  }[];
+  multiplied_correction_factor: null;
+}
+
+export interface SampledInput {
+  distribution: string;
+  low: number;
+  high: number;
+  unit: string;
+  status: string;
+  provenance: string;
+  statement?: string;
+  citation: Citation | null;
+}
+
+/** The approved-model result: both named water-level scenarios. */
+export interface ApprovedScreenResult {
+  model_path: "APPROVED_MODEL";
+  status: "evaluated" | "blocked";
+  well_id: string;
+  scenario: { name: string; version: string; date?: string; applied_as?: string };
+  interpretation: Interpretation;
+  water_level_scenarios: WaterLevelScenarioResult[];
+  user_inputs?: Record<string, { value: number; unit: string }>;
+  depth_reference?: {
+    depth_datum: string;
+    status: "AVAILABLE" | "UNAVAILABLE";
+    diagnostics: Diagnostic[];
+  };
+  storage_interval?: StorageIntervalResult;
+  temperature_selection?: TemperatureSelection;
+  systematic_effect?: SystematicEffect;
+  sampled_inputs?: Record<string, SampledInput>;
+  n_samples?: number;
+  reason?: string;
+  error?: string;
+  required_user_inputs?: RequiredInputSpec[];
+}
+
+export type ScreenResult = ApprovedScreenResult | LegacyScreenResult;
+
+export function isApproved(result: ScreenResult): result is ApprovedScreenResult {
+  return result.model_path === "APPROVED_MODEL";
+}
+
 export interface ScenarioSummary {
   name: string;
   aliases: string[];
@@ -176,6 +339,9 @@ export interface ScenarioSummary {
   evidence_classes: EvidenceClass[];
   literature_derived: boolean;
   supplies_user_inputs: string[];
+  validation_status?: "APPROVED_MODEL" | "NOT_VALIDATED";
+  model_path?: ModelPath;
+  required_user_inputs?: string[];
 }
 
 export interface TemperatureVariant {
@@ -194,10 +360,19 @@ export interface TemperatureComparison {
   p50_spread_mt: number | null;
   p50_spread_percent: number | null;
   interpretation: Interpretation;
+  validation_status?: "NOT_VALIDATED";
+  validation_note?: string;
   note?: string;
 }
 
+/**
+ * Caller inputs, exactly as sent. Which fields are present depends on the
+ * scenario's path: area_m2, z_top, z_base for the approved model; area_m2 and
+ * thickness_m for NOT_VALIDATED legacy scenarios. Nothing is derived here.
+ */
 export interface UserInputValues {
   area_m2: number;
-  thickness_m: number;
+  z_top?: number;
+  z_base?: number;
+  thickness_m?: number;
 }
