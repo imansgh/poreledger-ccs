@@ -13,6 +13,15 @@ stays visible until someone decides to change it. Each one says what it should
 assert instead once the corresponding finding is resolved.
 
 See ``docs/scientific-validation-audit.md``, Phase 4.
+
+Phase 14 (approved Model Contract). The Finding 4.1 characterisations below now
+describe the NOT_VALIDATED legacy resolver (``ScreeningScenario``), which owner
+decision O2 keeps unchanged: it is still gauge. The approved model adds
+``P_atm = 101 325 Pa`` at the EOS input (B1) and evaluates pressure at
+``z_state`` relative to a named water level (M1, M2); that is tested in the
+"approved pressure" section and in ``tests/test_approved_model.py``. The fracture
+gradient and safety factor have no default any more (D1, rule B), so the
+fracture tests pass arbitrary caller-supplied values.
 """
 
 from __future__ import annotations
@@ -29,18 +38,24 @@ from ccs_screen.ingest.scenario import (
     ScreeningScenario,
 )
 from ccs_screen.ingest.units import DepthMeasurement, UnitError
+from ccs_screen.approved_model import P_ATM_PA as APPROVED_P_ATM_PA
+from ccs_screen.approved_model import eos_pressure_pa
 from ccs_screen.pressure import (
-    DEFAULT_FRACTURE_GRADIENT_PA_M,
-    DEFAULT_SAFETY_FACTOR,
     allowable_delta_p_pa,
     fracture_pressure_pa,
     theis_injection_delta_p_pa,
 )
 from ccs_screen.properties import co2_density_kg_m3
 
-#: Standard atmosphere, exact by definition. Used only to measure the size of
-#: the offset in Finding 4.1 -- it is deliberately NOT added to the model.
+#: Standard atmosphere, exact by definition. Used here to measure the size of
+#: the offset in Finding 4.1 on the legacy resolver, which does not add it. The
+#: approved model adds it (B1); see the "approved pressure" section.
 P_ATM_PA = 101_325.0
+
+#: Arbitrary caller-supplied fracture criterion for the arithmetic tests. No
+#: gradient or safety factor is approved and neither has a default (D1).
+CALLER_GRADIENT_PA_M = 17_000.0
+CALLER_SAFETY_FACTOR = 0.8
 
 CASES = [
     ("shallow pilot", 1020.0, 897.0),
@@ -100,18 +115,19 @@ def test_density_range_propagates_as_a_pressure_range():
 
 
 def test_model_is_gauge_not_absolute():
-    """CHARACTERISATION, Finding 4.1.
+    """CHARACTERISATION, Finding 4.1 -- legacy resolver (NOT_VALIDATED, O2).
 
-    Zero depth returns 0 Pa, i.e. vacuum, so the model is gauge. Both consumers
-    (the EOS and the fracture comparison) require absolute pressure.
-
-    When Finding 4.1 is resolved this must assert P(0) == P_ATM_PA instead.
+    Zero depth returns 0 Pa, i.e. vacuum, so the legacy model is gauge. Finding
+    4.1 is resolved on the approved path only (B1):
+    ``test_approved_pressure_is_absolute_at_the_water_level`` asserts
+    P(z_state = z_wl) == P_ATM_PA there.
     """
     assert scenario_with_brine(1050.0).hydrostatic_pressure_pa(0.0)[0] == 0.0
 
 
 def test_no_atmospheric_term_anywhere_in_the_pressure_path():
-    """CHARACTERISATION, Finding 4.1. Pins the absence so a fix is deliberate."""
+    """CHARACTERISATION, Finding 4.1 -- legacy resolver only. O2 keeps the legacy
+    arithmetic unchanged, so the absence is still pinned there."""
     s = scenario_with_brine(1050.0)
     for z in (100.0, 1500.0, 5000.0):
         assert s.hydrostatic_pressure_pa(z)[0] == pytest.approx(
@@ -192,17 +208,19 @@ def test_documented_rotary_table_elevations_are_multi_megapascal():
 # -- fracture pressure -------------------------------------------------------
 
 
-def test_fracture_gradient_is_within_normal_clastic_practice():
-    """0.6631 psi/ft and 1.530 SG equivalent mud weight, derived independently.
+def test_no_fracture_gradient_or_safety_factor_default_exists():
+    """D1, rule B. Replaces the characterisation of the removed 15 000 Pa/m
+    default (0.6631 psi/ft), which is no longer part of any code path."""
+    import inspect
 
-    The 0.60-0.80 psi/ft band is uncited engineering judgment (Finding 4.5);
-    this checks arithmetic, not validity.
-    """
-    psi_per_ft = DEFAULT_FRACTURE_GRADIENT_PA_M * 0.3048 / 6894.757
-    assert 0.60 < psi_per_ft < 0.80
-    assert psi_per_ft == pytest.approx(0.6631, abs=0.001)
-    equivalent_mud_weight_sg = DEFAULT_FRACTURE_GRADIENT_PA_M / STANDARD_GRAVITY_M_S2 / 1000
-    assert equivalent_mud_weight_sg == pytest.approx(1.530, abs=0.001)
+    import ccs_screen.pressure as pressure
+
+    assert not [name for name in dir(pressure) if name.startswith("DEFAULT_")]
+    for function in (fracture_pressure_pa, allowable_delta_p_pa):
+        for name in ("fracture_gradient_pa_m", "safety_factor"):
+            parameter = inspect.signature(function).parameters.get(name)
+            if parameter is not None:
+                assert parameter.default is inspect.Parameter.empty, (function.__name__, name)
 
 
 def test_fracture_pressure_does_not_depend_on_brine_density():
@@ -218,26 +236,26 @@ def test_fracture_pressure_does_not_depend_on_brine_density():
 def test_headroom_matches_independent_recomputation(name, rho, z):
     initial_pressure_pa = rho * STANDARD_GRAVITY_M_S2 * z
     independent = max(
-        DEFAULT_SAFETY_FACTOR * z * DEFAULT_FRACTURE_GRADIENT_PA_M - initial_pressure_pa, 0.0
+        CALLER_SAFETY_FACTOR * z * CALLER_GRADIENT_PA_M - initial_pressure_pa, 0.0
     )
-    produced = allowable_delta_p_pa(initial_pressure_pa=initial_pressure_pa, depth_m=z)
+    produced = allowable_delta_p_pa(initial_pressure_pa=initial_pressure_pa, depth_m=z,
+                                    fracture_gradient_pa_m=CALLER_GRADIENT_PA_M,
+                                    safety_factor=CALLER_SAFETY_FACTOR)
     assert produced == pytest.approx(independent, rel=1e-15)
 
 
-@pytest.mark.parametrize("name,rho,z", CASES)
-def test_fracture_exceeds_hydrostatic_by_a_physical_margin(name, rho, z):
-    ratio = fracture_pressure_pa(z) / (rho * STANDARD_GRAVITY_M_S2 * z)
-    assert 1.3 < ratio < 1.6
-
-
 def test_no_injection_window_returns_zero_not_a_negative_headroom():
-    assert allowable_delta_p_pa(initial_pressure_pa=5e7, depth_m=1500.0) == 0.0
+    assert allowable_delta_p_pa(initial_pressure_pa=5e7, depth_m=1500.0,
+                                fracture_gradient_pa_m=CALLER_GRADIENT_PA_M,
+                                safety_factor=CALLER_SAFETY_FACTOR) == 0.0
 
 
 @pytest.mark.parametrize("safety_factor", [0.0, -0.1, 1.5])
 def test_safety_factor_outside_its_interval_is_rejected(safety_factor):
     with pytest.raises(ValueError):
-        allowable_delta_p_pa(initial_pressure_pa=1e7, depth_m=1500.0, safety_factor=safety_factor)
+        allowable_delta_p_pa(initial_pressure_pa=1e7, depth_m=1500.0,
+                             fracture_gradient_pa_m=CALLER_GRADIENT_PA_M,
+                             safety_factor=safety_factor)
 
 
 # -- convention compatibility ------------------------------------------------
@@ -259,15 +277,19 @@ def test_theis_delta_p_is_invariant_under_a_pressure_offset():
 def test_headroom_mixes_a_gauge_initial_against_an_absolute_limit():
     """CHARACTERISATION, Finding 4.1 revision: if the fracture gradient is
     absolute, headroom is overstated by exactly P_atm; its convention is
-    undocumented, so this is conditional, not a confirmed defect. Replace this
-    test once the convention is declared.
+    undocumented, so this is conditional, not a confirmed defect. B2 is DEFERRED
+    and no fracture criterion is approved (D1), so the criterion is caller-supplied.
+    Replace this test once the convention is declared.
     """
     z, rho = 1527.5, 1050.0
     gauge = rho * STANDARD_GRAVITY_M_S2 * z
-    mixed = allowable_delta_p_pa(initial_pressure_pa=gauge, depth_m=z)
-    consistent = allowable_delta_p_pa(initial_pressure_pa=gauge + P_ATM_PA, depth_m=z)
+    criterion = dict(fracture_gradient_pa_m=CALLER_GRADIENT_PA_M,
+                     safety_factor=CALLER_SAFETY_FACTOR)
+    mixed = allowable_delta_p_pa(initial_pressure_pa=gauge, depth_m=z, **criterion)
+    consistent = allowable_delta_p_pa(initial_pressure_pa=gauge + P_ATM_PA, depth_m=z, **criterion)
     assert mixed - consistent == pytest.approx(P_ATM_PA, rel=1e-9)
-    assert (mixed - consistent) / consistent == pytest.approx(0.0212, abs=0.001)
+    independent = CALLER_SAFETY_FACTOR * CALLER_GRADIENT_PA_M * z - gauge - P_ATM_PA
+    assert (mixed - consistent) / consistent == pytest.approx(P_ATM_PA / independent, rel=1e-9)
 
 
 # -- brine density -----------------------------------------------------------
@@ -314,7 +336,31 @@ def test_negative_depth_is_accepted_and_returns_negative_pressure():
 @pytest.mark.parametrize("depth_m", [0.0, -1.0])
 def test_fracture_pressure_rejects_non_positive_depth(depth_m):
     with pytest.raises(ValueError):
-        fracture_pressure_pa(depth_m)
+        fracture_pressure_pa(depth_m, CALLER_GRADIENT_PA_M)
+
+
+# -- approved pressure (B1, M1, M2) -------------------------------------------
+
+
+def test_approved_pressure_is_absolute_at_the_water_level():
+    """Finding 4.1 resolved on the approved path: P_EOS(z_state = z_wl) = P_atm."""
+    assert APPROVED_P_ATM_PA == P_ATM_PA
+    assert eos_pressure_pa(1050.0, 0.0, 0.0) == P_ATM_PA
+    assert eos_pressure_pa(1050.0, 250.0, 250.0) == P_ATM_PA
+
+
+@pytest.mark.parametrize("name,rho,z", CASES)
+def test_approved_pressure_matches_independent_rational_implementation(name, rho, z):
+    expected = Fraction(str(P_ATM_PA)) + independent_hydrostatic_pa(rho, z)
+    assert eos_pressure_pa(rho, z, 0.0) == pytest.approx(float(expected), rel=1e-15)
+
+
+def test_approved_pressure_depends_on_the_state_point_not_total_depth():
+    """M1/S1: the state point is z_state; total depth is not an argument."""
+    import inspect
+
+    assert list(inspect.signature(eos_pressure_pa).parameters) == [
+        "brine_density_kg_m3", "z_state_m", "z_wl_m"]
 
 
 def test_scenario_without_brine_density_refuses_to_derive_pressure():

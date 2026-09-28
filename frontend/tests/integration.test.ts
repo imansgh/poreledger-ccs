@@ -111,26 +111,29 @@ describe("frontend against a real backend", () => {
   });
 
   it(
-    "runs the full workflow: select well, supply inputs, screen, read P10/P50/P90",
+    "runs the approved workflow: area and interval in, both named scenarios out",
     async (ctx) => {
       if (!requireBackend(ctx)) return;
       // 1. Well selection -> the record the UI would display.
       const detail = await (await fetch(`${BASE}/wells/${encodeURIComponent(WELL)}`)).json();
       expect(detail.canonical_id).toBe(WELL);
       expect(detail.fields.temperature_k.provenance).toBe("derived");
+      expect(detail.approved_model_depth_reference.status).toBe("UNAVAILABLE");
 
-      // 2. What the UI must ask the user for.
+      // 2. What the UI must ask the user for on the approved model.
       const inputs = await (
         await fetch(`${BASE}/wells/${encodeURIComponent(WELL)}/inputs`)
       ).json();
+      expect(inputs.model_path).toBe("APPROVED_MODEL");
       expect(inputs.required.map((r: { field: string }) => r.field).sort()).toEqual([
         "area_m2",
-        "thickness_m",
+        "z_base",
+        "z_top",
       ]);
 
-      // 3. User enters 80 km2 and 35 m; the form converts area to m2.
+      // 3. User enters 80 km2 and an interval; the form converts area to m2.
       const body = {
-        user_inputs: { area_m2: 80_000_000, thickness_m: 35 },
+        user_inputs: { area_m2: 80_000_000, z_top: 1400, z_base: 1527 },
         scenario: "literature-screening-v1",
         samples: 2000,
       };
@@ -142,10 +145,57 @@ describe("frontend against a real backend", () => {
       expect(response.status).toBe(200);
       const result = await response.json();
 
-      // 4. A real Monte Carlo result, ordered and finite.
+      // 4. Both named scenarios, each with a status. No ingested depth reference
+      //    is established (C2), so on real data both are UNAVAILABLE.
+      expect(result.status).toBe("evaluated");
+      expect(result.model_path).toBe("APPROVED_MODEL");
+      const names = result.water_level_scenarios.map((s: { name: string }) => s.name);
+      expect(names).toEqual(["GROUND_REFERENCE", "SEA_LEVEL_SENSITIVITY"]);
+      for (const scenario of result.water_level_scenarios) {
+        expect(scenario.validation_status).toBe("UNAVAILABLE");
+        expect(scenario.capacity_mt).toBeNull();
+        expect(scenario.diagnostics[0].code).toBe("DEPTH_REFERENCE_NOT_ESTABLISHED");
+      }
+
+      // 5. The interpretation block the qualifier depends on.
+      expect(result.interpretation.type).toBe("scenario_based_capacity");
+      expect(result.interpretation.site_specific).toBe(false);
+      expect(result.interpretation.certified).toBe(false);
+      expect(
+        result.interpretation.warnings.map((w: { code: string }) => w.code),
+      ).toContain("scale_mismatch_basin_vs_closure");
+    },
+    30_000,
+  );
+
+  it(
+    "runs the legacy workflow: NOT_VALIDATED, with the provenance partition",
+    async (ctx) => {
+      if (!requireBackend(ctx)) return;
+      const inputs = await (
+        await fetch(`${BASE}/wells/${encodeURIComponent(WELL)}/inputs?scenario=sensitivity`)
+      ).json();
+      expect(inputs.required.map((r: { field: string }) => r.field).sort()).toEqual([
+        "area_m2",
+        "thickness_m",
+      ]);
+
+      const response = await fetch(`${BASE}/wells/${encodeURIComponent(WELL)}/screen`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          user_inputs: { area_m2: 80_000_000, thickness_m: 35 },
+          scenario: "sensitivity",
+          samples: 2000,
+        }),
+      });
+      expect(response.status).toBe(200);
+      const result = await response.json();
+
+      // A real Monte Carlo result, ordered and finite, labelled NOT_VALIDATED.
       expect(result.status).toBe("screened");
+      expect(result.validation_status).toBe("NOT_VALIDATED");
       const capacity = result.scenario_based_capacity_mt;
-      expect(capacity).not.toBeNull();
       expect(capacity.p10).toBeLessThan(capacity.p50);
       expect(capacity.p50).toBeLessThan(capacity.p90);
       expect(capacity.n_samples).toBe(2000);
@@ -154,12 +204,11 @@ describe("frontend against a real backend", () => {
         expect(capacity[key]).toBeGreaterThan(0);
       }
 
-      // 5. The provenance contract the UI renders.
+      // The provenance contract the UI renders (placeholder scenario: the
+      // pressure is a flat assumption, so no MODELLED input).
       expect(result.source_derived_inputs).toEqual(["temperature_k"]);
-      expect(result.modelled_inputs).toEqual(["pressure_pa"]);
-      expect(result.assumed_inputs.sort()).toEqual(["porosity", "storage_efficiency"]);
+      expect(result.modelled_inputs).toEqual([]);
       expect(result.user_supplied_inputs.sort()).toEqual(["area_m2", "thickness_m"]);
-
       const buckets = [
         ...result.source_derived_inputs,
         ...result.modelled_inputs,
@@ -167,30 +216,10 @@ describe("frontend against a real backend", () => {
         ...result.user_supplied_inputs,
       ];
       expect(new Set(buckets).size, "buckets must stay disjoint").toBe(buckets.length);
-
-      // 6. The interpretation block the qualifier depends on.
-      expect(result.interpretation.type).toBe("scenario_based_capacity");
-      expect(result.interpretation.site_specific).toBe(false);
-      expect(result.interpretation.certified).toBe(false);
+      expect(buckets.length).toBe(6);
       expect(
         result.interpretation.warnings.map((w: { code: string }) => w.code),
-      ).toContain("scale_mismatch_basin_vs_closure");
-
-      // 7. Labels the InputCard switches on.
-      const labels = Object.fromEntries(
-        Object.entries(result.screening_inputs).map(([k, v]) => [
-          k,
-          (v as { label: string }).label,
-        ]),
-      );
-      expect(labels).toEqual({
-        temperature_k: "source",
-        pressure_pa: "MODELLED",
-        porosity: "ASSUMED",
-        storage_efficiency: "ASSUMED",
-        area_m2: "USER",
-        thickness_m: "USER",
-      });
+      ).toContain("not_validated_legacy_path");
     },
     30_000,
   );
@@ -202,6 +231,7 @@ describe("frontend against a real backend", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         user_inputs: { area_m2: 80_000_000, thickness_m: 35 },
+        scenario: "sensitivity",
         samples: 100,
       }),
     });
@@ -227,7 +257,7 @@ describe("frontend against a real backend", () => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        user_inputs: { area_m2: 8e7, thickness_m: 35 },
+        user_inputs: { area_m2: 8e7, z_top: 1400, z_base: 1527 },
         samples: 10_000_000,
       }),
     });

@@ -3,8 +3,14 @@
  *
  * These do not re-test the backend. They test the things a frontend can break
  * on its own: showing a number without its provenance, merging the four
- * buckets, hiding a warning, inventing a default, or rendering a capacity for a
- * blocked well.
+ * buckets, hiding a warning, inventing a default, rendering a capacity for a
+ * blocked well, computing a scientific value, or presenting a NOT_VALIDATED
+ * legacy result as validated.
+ *
+ * Phase 14: the default scenario runs the approved model (inputs area_m2,
+ * z_top, z_base; both named water-level scenarios with their statuses). The
+ * original legacy-path tests run against a NOT_VALIDATED placeholder scenario
+ * with its unchanged inputs (area_m2, thickness_m).
  */
 
 import { render, screen, waitFor, within } from "@testing-library/react";
@@ -15,7 +21,13 @@ import { ScreeningWorkspace } from "@/components/ScreeningWorkspace";
 import * as api from "@/lib/api";
 import { ApiClientError } from "@/lib/api";
 import {
+  approvedBlocked,
+  approvedMixed,
+  approvedUnavailable,
+  approvedValidated,
   blocked,
+  legacyRequiredInputs,
+  legacyScenario,
   requiredInputs,
   scenarios,
   screened,
@@ -24,6 +36,9 @@ import {
   wells,
 } from "./fixtures";
 
+type User = ReturnType<typeof userEvent.setup>;
+
+/** Approved model: the default scenario. */
 function stubHappyPath() {
   vi.spyOn(api, "listWells").mockResolvedValue(wells);
   vi.spyOn(api, "listScenarios").mockResolvedValue(scenarios);
@@ -31,19 +46,43 @@ function stubHappyPath() {
   vi.spyOn(api, "getRequiredInputs").mockResolvedValue(requiredInputs);
 }
 
-async function selectSaluzzo(user: ReturnType<typeof userEvent.setup>) {
+/** A NOT_VALIDATED legacy scenario is the only one offered, so it is selected. */
+function stubLegacyPath() {
+  vi.spyOn(api, "listWells").mockResolvedValue(wells);
+  vi.spyOn(api, "listScenarios").mockResolvedValue([legacyScenario]);
+  vi.spyOn(api, "getWell").mockResolvedValue(wellDetail);
+  vi.spyOn(api, "getRequiredInputs").mockResolvedValue(legacyRequiredInputs);
+}
+
+async function selectSaluzzo(user: User) {
   const button = await screen.findByRole("button", { name: /SALUZZO\|1/ });
   await user.click(button);
   await screen.findByRole("heading", { name: /source data/i });
 }
 
-async function fillInputs(
-  user: ReturnType<typeof userEvent.setup>,
-  areaKm2 = "80",
-  thickness = "35",
-) {
+/** Legacy inputs. */
+async function fillInputs(user: User, areaKm2 = "80", thickness = "35") {
   await user.type(screen.getByLabelText(/storage area/i), areaKm2);
   await user.type(screen.getByLabelText(/net reservoir thickness/i), thickness);
+}
+
+/** Approved-model inputs. */
+async function fillApproved(user: User, areaKm2 = "80", top = "1400", base = "1527") {
+  await user.type(screen.getByLabelText(/storage area/i), areaKm2);
+  await user.type(screen.getByLabelText(/z_top/i), top);
+  await user.type(screen.getByLabelText(/z_base/i), base);
+}
+
+async function runApproved(result = approvedValidated) {
+  stubHappyPath();
+  const spy = vi.spyOn(api, "screenWell").mockResolvedValue(result);
+  const user = userEvent.setup();
+  render(<ScreeningWorkspace />);
+  await selectSaluzzo(user);
+  await fillApproved(user);
+  await user.click(screen.getByRole("button", { name: /run screening/i }));
+  await screen.findByRole("heading", { name: /^result$/i });
+  return { user, spy };
 }
 
 beforeEach(() => {
@@ -77,6 +116,17 @@ describe("well list and selection", () => {
     expect(screen.getByText(/1,527.5 m/)).toBeInTheDocument();
   });
 
+  it("shows the approved-model depth reference status as the API reports it", async () => {
+    stubHappyPath();
+    const user = userEvent.setup();
+    render(<ScreeningWorkspace />);
+    await selectSaluzzo(user);
+    expect(
+      screen.getByText("UNAVAILABLE (DEPTH_REFERENCE_NOT_ESTABLISHED)"),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Blocked: depth_datum/)).toBeInTheDocument();
+  });
+
   it("shows Not available rather than inventing a value", async () => {
     stubHappyPath();
     vi.spyOn(api, "getWell").mockResolvedValue({
@@ -90,30 +140,109 @@ describe("well list and selection", () => {
   });
 });
 
-describe("required user inputs", () => {
-  it("has no default area or thickness", async () => {
+describe("required user inputs -- approved model", () => {
+  it("asks for area and the storage interval, never a thickness", async () => {
+    stubHappyPath();
+    const user = userEvent.setup();
+    render(<ScreeningWorkspace />);
+    await selectSaluzzo(user);
+    expect(screen.getByLabelText(/storage area/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/z_top/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/z_base/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/net reservoir thickness/i)).not.toBeInTheDocument();
+  });
+
+  it("has no default area or interval", async () => {
     stubHappyPath();
     const user = userEvent.setup();
     render(<ScreeningWorkspace />);
     await selectSaluzzo(user);
     expect(screen.getByLabelText(/storage area/i)).toHaveValue(null);
-    expect(screen.getByLabelText(/net reservoir thickness/i)).toHaveValue(null);
+    expect(screen.getByLabelText(/z_top/i)).toHaveValue(null);
+    expect(screen.getByLabelText(/z_base/i)).toHaveValue(null);
   });
 
   it("requires area before screening", async () => {
     stubHappyPath();
-    const spy = vi.spyOn(api, "screenWell").mockResolvedValue(screened);
+    const spy = vi.spyOn(api, "screenWell").mockResolvedValue(approvedValidated);
     const user = userEvent.setup();
     render(<ScreeningWorkspace />);
     await selectSaluzzo(user);
-    await user.type(screen.getByLabelText(/net reservoir thickness/i), "35");
+    await user.type(screen.getByLabelText(/z_top/i), "1400");
+    await user.type(screen.getByLabelText(/z_base/i), "1527");
     await user.click(screen.getByRole("button", { name: /run screening/i }));
     expect(await screen.findByText(/storage area is required/i)).toBeInTheDocument();
     expect(spy).not.toHaveBeenCalled();
   });
 
-  it("requires net reservoir thickness before screening", async () => {
+  it("requires both interval bounds before screening", async () => {
     stubHappyPath();
+    const spy = vi.spyOn(api, "screenWell").mockResolvedValue(approvedValidated);
+    const user = userEvent.setup();
+    render(<ScreeningWorkspace />);
+    await selectSaluzzo(user);
+    await user.type(screen.getByLabelText(/storage area/i), "80");
+    await user.click(screen.getByRole("button", { name: /run screening/i }));
+    expect(await screen.findByText(/z_top\) is required/i)).toBeInTheDocument();
+    expect(screen.getByText(/z_base\) is required/i)).toBeInTheDocument();
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it("rejects a negative top and a base that is not deeper than the top", async () => {
+    stubHappyPath();
+    const spy = vi.spyOn(api, "screenWell").mockResolvedValue(approvedValidated);
+    const user = userEvent.setup();
+    render(<ScreeningWorkspace />);
+    await selectSaluzzo(user);
+    await fillApproved(user, "80", "-5", "1527");
+    await user.click(screen.getByRole("button", { name: /run screening/i }));
+    expect(await screen.findByText(/must be 0 or greater/i)).toBeInTheDocument();
+    await user.clear(screen.getByLabelText(/z_top/i));
+    await user.type(screen.getByLabelText(/z_top/i), "1600");
+    await user.click(screen.getByRole("button", { name: /run screening/i }));
+    expect(await screen.findByText(/must be deeper than z_top/i)).toBeInTheDocument();
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it("sends exactly area (converted to m2), z_top and z_base -- nothing derived", async () => {
+    const { spy } = await runApproved();
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(spy.mock.calls[0][1]).toEqual({ area_m2: 80_000_000, z_top: 1400, z_base: 1527 });
+    expect(spy.mock.calls[0][2]).toBe("literature-screening-v1");
+  });
+
+  it("states that the interval is not inferred from total depth", async () => {
+    stubHappyPath();
+    const user = userEvent.setup();
+    render(<ScreeningWorkspace />);
+    await selectSaluzzo(user);
+    expect(
+      screen.getByText(/not inferred from total depth or stratigraphic units/i),
+    ).toBeInTheDocument();
+  });
+});
+
+describe("required user inputs -- legacy scenario (NOT_VALIDATED)", () => {
+  it("has no default area or thickness", async () => {
+    stubLegacyPath();
+    const user = userEvent.setup();
+    render(<ScreeningWorkspace />);
+    await selectSaluzzo(user);
+    expect(screen.getByLabelText(/storage area/i)).toHaveValue(null);
+    expect(screen.getByLabelText(/net reservoir thickness/i)).toHaveValue(null);
+    expect(screen.queryByLabelText(/z_top/i)).not.toBeInTheDocument();
+  });
+
+  it("marks the scenario NOT_VALIDATED at the point of entry", async () => {
+    stubLegacyPath();
+    const user = userEvent.setup();
+    render(<ScreeningWorkspace />);
+    await selectSaluzzo(user);
+    expect(screen.getByText("NOT_VALIDATED legacy scenario")).toBeInTheDocument();
+  });
+
+  it("requires net reservoir thickness before screening", async () => {
+    stubLegacyPath();
     const spy = vi.spyOn(api, "screenWell").mockResolvedValue(screened);
     const user = userEvent.setup();
     render(<ScreeningWorkspace />);
@@ -127,7 +256,7 @@ describe("required user inputs", () => {
   });
 
   it("rejects zero and negative values", async () => {
-    stubHappyPath();
+    stubLegacyPath();
     const spy = vi.spyOn(api, "screenWell").mockResolvedValue(screened);
     const user = userEvent.setup();
     render(<ScreeningWorkspace />);
@@ -139,7 +268,7 @@ describe("required user inputs", () => {
   });
 
   it("states that net thickness is not inferred from gross thickness", async () => {
-    stubHappyPath();
+    stubLegacyPath();
     const user = userEvent.setup();
     render(<ScreeningWorkspace />);
     await selectSaluzzo(user);
@@ -148,8 +277,8 @@ describe("required user inputs", () => {
     ).toBeInTheDocument();
   });
 
-  it("converts area from km2 to m2 before calling the API", async () => {
-    stubHappyPath();
+  it("converts area from km2 to m2 and sends thickness_m unchanged", async () => {
+    stubLegacyPath();
     const spy = vi.spyOn(api, "screenWell").mockResolvedValue(screened);
     const user = userEvent.setup();
     render(<ScreeningWorkspace />);
@@ -158,12 +287,117 @@ describe("required user inputs", () => {
     await user.click(screen.getByRole("button", { name: /run screening/i }));
     await waitFor(() => expect(spy).toHaveBeenCalled());
     expect(spy.mock.calls[0][1]).toEqual({ area_m2: 80_000_000, thickness_m: 35 });
+    expect(spy.mock.calls[0][2]).toBe("sensitivity-placeholder");
   });
 });
 
-describe("successful screening", () => {
+describe("approved model result", () => {
+  it("renders both named water-level scenarios together", async () => {
+    await runApproved();
+    expect(screen.getByText(/GROUND_REFERENCE \(baseline\)/)).toBeInTheDocument();
+    expect(screen.getByText(/SEA_LEVEL_SENSITIVITY \(sensitivity\)/)).toBeInTheDocument();
+    expect(screen.getByText(/PROJECT REFERENCE SCENARIO/)).toBeInTheDocument();
+    expect(screen.getAllByText(/not a measured formation head/).length).toBeGreaterThan(1);
+    // Neither is offered as a choice: there is no control to pick one.
+    expect(screen.queryByRole("radio")).not.toBeInTheDocument();
+  });
+
+  it("shows validated percentiles for each VALIDATED scenario", async () => {
+    await runApproved();
+    expect(screen.getAllByText("VALIDATED")).toHaveLength(2);
+    expect(screen.getByText("14.6")).toBeInTheDocument();
+    expect(screen.getByText("12.2")).toBeInTheDocument();
+    expect(screen.getAllByText("P50")).toHaveLength(2);
+  });
+
+  it("shows the scenario contrast as a contrast, not a correction", async () => {
+    await runApproved();
+    expect(screen.getByText(/P50 difference -2.44 Mt CO2/)).toBeInTheDocument();
+    expect(screen.getByText(/not a correction factor/i)).toBeInTheDocument();
+  });
+
+  it("hides percentiles when a scenario is not validated and shows why", async () => {
+    await runApproved(approvedMixed);
+    expect(screen.getAllByText("OUTSIDE_VALIDATED_ENVELOPE").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("UNAVAILABLE").length).toBeGreaterThan(0);
+    expect(screen.queryByText("P50")).not.toBeInTheDocument();
+    expect(screen.getByText(/validated percentiles blocked/i)).toBeInTheDocument();
+    expect(screen.getByText(/no realisation was discarded/i)).toBeInTheDocument();
+    expect(screen.getByText(/SURFACE_ELEVATION_UNAVAILABLE/)).toBeInTheDocument();
+    expect(screen.getAllByText(/OUTSIDE_VALIDATED_ENVELOPE/).length).toBeGreaterThan(1);
+    expect(screen.getByText(/not reported - both scenarios must be VALIDATED/)).toBeInTheDocument();
+  });
+
+  it("never displays the NOT_VALIDATED diagnostic capacity numbers", async () => {
+    await runApproved(approvedMixed);
+    const body = document.body.textContent ?? "";
+    for (const value of ["88.8", "99.9", "111.1", "100.5"]) {
+      expect(body).not.toContain(value);
+    }
+  });
+
+  it("shows the depth-reference diagnostic when every scenario is unavailable", async () => {
+    await runApproved(approvedUnavailable);
+    expect(screen.getAllByText("UNAVAILABLE").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText(/DEPTH_REFERENCE_NOT_ESTABLISHED/).length).toBeGreaterThan(0);
+    expect(screen.queryByText("P50")).not.toBeInTheDocument();
+  });
+
+  it("does not calculate h_g or z_state when the API withholds them", async () => {
+    await runApproved(approvedUnavailable);
+    // z_top 1400 and z_base 1527 are shown, but 127 m and 1463.5 m are not
+    // computed here: the API reports them as unavailable.
+    expect(screen.getByText("1,400 m / 1,527 m")).toBeInTheDocument();
+    const body = document.body.textContent ?? "";
+    expect(body).not.toContain("127 m");
+    expect(body).not.toContain("1,463.5");
+  });
+
+  it("shows derived values only as the API reports them", async () => {
+    await runApproved();
+    expect(screen.getByText("127 m")).toBeInTheDocument();
+    expect(screen.getByText("1,463.5 m")).toBeInTheDocument();
+  });
+
+  it("shows the selected temperature observation and the sampled priors with citations", async () => {
+    await runApproved();
+    expect(screen.getByText(/318.15 K at 1,522.6 m \(extrapolated_squarci_taffi\)/)).toBeInTheDocument();
+    const panel = screen.getByRole("region", { name: /approved model inputs/i });
+    expect(within(panel).getByText(/Donda, Volpi.*\(2011\)/)).toBeInTheDocument();
+    expect(within(panel).getByText(/project-defined prior over the DOE-derived/)).toBeInTheDocument();
+    expect(within(panel).getByText(/CSLF Task Force \(2008\)/)).toBeInTheDocument();
+  });
+
+  it("does not expose legacy-only controls or panels", async () => {
+    await runApproved();
+    expect(
+      screen.queryByRole("button", { name: /compare temperature methods/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("region", { name: /provenance of every screening input/i }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/^NOT_VALIDATED$/)).not.toBeInTheDocument();
+  });
+
+  it("shows a rejected approved request without a number", async () => {
+    await runApproved(approvedBlocked);
+    expect(screen.getByText(/screening unavailable/i)).toBeInTheDocument();
+    expect(screen.getByText(/not an input of the approved model/i)).toBeInTheDocument();
+    expect(screen.queryByText("P50")).not.toBeInTheDocument();
+  });
+
+  it("states the result is scenario-based and not certified", async () => {
+    await runApproved();
+    expect(
+      screen.getByText(/not a site-specific or certified storage capacity/i),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/conditional on the declared model/i)).toBeInTheDocument();
+  });
+});
+
+describe("successful legacy screening", () => {
   async function renderScreened() {
-    stubHappyPath();
+    stubLegacyPath();
     vi.spyOn(api, "screenWell").mockResolvedValue(screened);
     const user = userEvent.setup();
     render(<ScreeningWorkspace />);
@@ -173,6 +407,13 @@ describe("successful screening", () => {
     await screen.findByRole("heading", { name: /^result$/i });
     return user;
   }
+
+  it("labels the result NOT_VALIDATED", async () => {
+    await renderScreened();
+    expect(screen.getByText("NOT_VALIDATED")).toBeInTheDocument();
+    expect(screen.getByText(/not a validated scientific screening result/i)).toBeInTheDocument();
+    expect(screen.getByText(/not_validated_legacy_path/)).toBeInTheDocument();
+  });
 
   it("shows P50 as the headline with the scenario-based wording", async () => {
     await renderScreened();
@@ -221,9 +462,9 @@ describe("successful screening", () => {
   });
 });
 
-describe("provenance partition", () => {
+describe("provenance partition (legacy)", () => {
   async function renderProvenance() {
-    stubHappyPath();
+    stubLegacyPath();
     vi.spyOn(api, "screenWell").mockResolvedValue(screened);
     const user = userEvent.setup();
     render(<ScreeningWorkspace />);
@@ -289,7 +530,7 @@ describe("provenance partition", () => {
 
 describe("warnings", () => {
   it("shows the scale mismatch advisory in flow", async () => {
-    stubHappyPath();
+    stubLegacyPath();
     vi.spyOn(api, "screenWell").mockResolvedValue(screened);
     const user = userEvent.setup();
     render(<ScreeningWorkspace />);
@@ -302,13 +543,21 @@ describe("warnings", () => {
       ),
     ).toBeInTheDocument();
     expect(screen.getByText(/scale_mismatch_basin_vs_closure/)).toBeInTheDocument();
-    expect(screen.getByText(/does not invalidate the result/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/does not invalidate the result/i).length).toBeGreaterThan(0);
+  });
+
+  it("shows the approved model's standing limitations", async () => {
+    await runApproved();
+    expect(screen.getByText(/scale_mismatch_basin_vs_closure/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/storage-assessment interval \(z_top, z_base\) is explicit user input/i),
+    ).toBeInTheDocument();
   });
 });
 
-describe("blocked wells", () => {
+describe("blocked wells (legacy)", () => {
   it("shows Screening unavailable and no capacity", async () => {
-    stubHappyPath();
+    stubLegacyPath();
     vi.spyOn(api, "screenWell").mockResolvedValue(blocked);
     const user = userEvent.setup();
     render(<ScreeningWorkspace />);
@@ -322,7 +571,7 @@ describe("blocked wells", () => {
   });
 
   it("explains that temperature is non-assumable", async () => {
-    stubHappyPath();
+    stubLegacyPath();
     vi.spyOn(api, "screenWell").mockResolvedValue(blocked);
     const user = userEvent.setup();
     render(<ScreeningWorkspace />);
@@ -335,7 +584,7 @@ describe("blocked wells", () => {
   });
 
   it("renders no provenance panel when blocked", async () => {
-    stubHappyPath();
+    stubLegacyPath();
     vi.spyOn(api, "screenWell").mockResolvedValue(blocked);
     const user = userEvent.setup();
     render(<ScreeningWorkspace />);
@@ -358,7 +607,7 @@ describe("error handling", () => {
     const user = userEvent.setup();
     render(<ScreeningWorkspace />);
     await selectSaluzzo(user);
-    await fillInputs(user);
+    await fillApproved(user);
     await user.click(screen.getByRole("button", { name: /run screening/i }));
     expect(await screen.findByText(/Input should be greater than 0/)).toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(/Traceback|at Object\./);
@@ -413,30 +662,27 @@ describe("error handling", () => {
 
   it("re-fetches required inputs and drops the result when the scenario changes", async () => {
     stubHappyPath();
-    const other = {
-      ...scenarios[0],
-      name: "central-placeholder",
-      aliases: ["central"],
-      literature_derived: false,
-    };
-    vi.spyOn(api, "listScenarios").mockResolvedValue([...scenarios, other]);
-    vi.spyOn(api, "screenWell").mockResolvedValue(screened);
+    vi.spyOn(api, "screenWell").mockResolvedValue(approvedValidated);
     const user = userEvent.setup();
     render(<ScreeningWorkspace />);
     await selectSaluzzo(user);
-    await fillInputs(user);
+    await fillApproved(user);
     await user.click(screen.getByRole("button", { name: /run screening/i }));
-    await screen.findByText(/scenario-based storage capacity/i);
+    await screen.findByText(/GROUND_REFERENCE \(baseline\)/);
 
-    await user.selectOptions(screen.getByLabelText(/screening scenario/i), other.name);
+    vi.spyOn(api, "getRequiredInputs").mockResolvedValue(legacyRequiredInputs);
+    await user.selectOptions(screen.getByLabelText(/screening scenario/i), legacyScenario.name);
     await waitFor(() =>
-      expect(api.getRequiredInputs).toHaveBeenLastCalledWith("SALUZZO|1", other.name),
+      expect(api.getRequiredInputs).toHaveBeenLastCalledWith("SALUZZO|1", legacyScenario.name),
     );
-    expect(screen.queryByText(/scenario-based storage capacity/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/GROUND_REFERENCE \(baseline\)/)).not.toBeInTheDocument();
+    // The legacy scenario brings its own inputs; the interval is not carried over.
+    expect(await screen.findByLabelText(/net reservoir thickness/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/z_top/i)).not.toBeInTheDocument();
   });
 
   it("clears a stale result when another well is selected", async () => {
-    stubHappyPath();
+    stubLegacyPath();
     vi.spyOn(api, "screenWell").mockResolvedValue(screened);
     const user = userEvent.setup();
     render(<ScreeningWorkspace />);
@@ -452,9 +698,9 @@ describe("error handling", () => {
   });
 });
 
-describe("temperature comparison", () => {
-  it("lists each method without declaring one correct", async () => {
-    stubHappyPath();
+describe("temperature comparison (legacy diagnostic)", () => {
+  it("lists each method without declaring one correct, labelled NOT_VALIDATED", async () => {
+    stubLegacyPath();
     vi.spyOn(api, "compareTemperatureMethods").mockResolvedValue(temperatureComparison);
     const user = userEvent.setup();
     render(<ScreeningWorkspace />);
@@ -466,12 +712,26 @@ describe("temperature comparison", () => {
     expect(within(table).getByText("extrapolated_squarci_taffi")).toBeInTheDocument();
     expect(within(table).getByText("non_stabilized")).toBeInTheDocument();
     expect(screen.getByText(/no method is authoritative/i)).toBeInTheDocument();
+    expect(screen.getByText("NOT_VALIDATED legacy diagnostic")).toBeInTheDocument();
+  });
+
+  it("is not offered under the approved model", async () => {
+    stubHappyPath();
+    const spy = vi.spyOn(api, "compareTemperatureMethods");
+    const user = userEvent.setup();
+    render(<ScreeningWorkspace />);
+    await selectSaluzzo(user);
+    expect(
+      screen.queryByRole("button", { name: /compare temperature methods/i }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText(/offered on legacy scenarios only/i)).toBeInTheDocument();
+    expect(spy).not.toHaveBeenCalled();
   });
 });
 
-describe("prominent scientific qualifier", () => {
+describe("prominent scientific qualifier (legacy)", () => {
   async function renderScreened() {
-    stubHappyPath();
+    stubLegacyPath();
     vi.spyOn(api, "screenWell").mockResolvedValue(screened);
     const user = userEvent.setup();
     render(<ScreeningWorkspace />);
@@ -528,7 +788,7 @@ describe("loading state", () => {
   }
 
   it("disables the run button, marks the region busy and hides any stale result", async () => {
-    stubHappyPath();
+    stubLegacyPath();
     const firstRun = vi.spyOn(api, "screenWell").mockResolvedValue(screened);
     const user = userEvent.setup();
     render(<ScreeningWorkspace />);
@@ -559,7 +819,7 @@ describe("loading state", () => {
   });
 
   it("announces the loading state to assistive technology", async () => {
-    stubHappyPath();
+    stubLegacyPath();
     const release = deferredScreen();
     const user = userEvent.setup();
     render(<ScreeningWorkspace />);

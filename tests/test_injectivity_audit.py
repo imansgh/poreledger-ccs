@@ -20,8 +20,6 @@ import math
 import pytest
 
 from ccs_screen.pressure import (
-    DEFAULT_FRACTURE_GRADIENT_PA_M,
-    DEFAULT_SAFETY_FACTOR,
     allowable_delta_p_pa,
     max_injection_rate_m3_s,
     theis_injection_delta_p_pa,
@@ -41,6 +39,10 @@ BASE = dict(
     compressibility_1_pa=1.2e-9,
 )
 DEFAULT_RATE_M3_S = 0.08
+
+#: Phase 14 (D1, rule B): no fracture gradient or safety factor is approved and
+#: neither has a default. Arbitrary caller-supplied values for the arithmetic.
+CALLER_CRITERION = dict(fracture_gradient_pa_m=17_000.0, safety_factor=0.8)
 
 #: Wenzel (1942), reproduced in Freeze & Cherry (1979) Appendix and
 #: Kruseman & de Ridder (1990) Annex 3.
@@ -171,15 +173,22 @@ def test_default_radius_understates_wellbore_pressure_by_about_three_times():
 
 
 def test_rate_ceiling_inherits_the_same_three_times_overstatement():
-    """CHARACTERISATION, Finding 5.1, expressed as the number a user acts on."""
-    headroom_pa = allowable_delta_p_pa(initial_pressure_pa=1.6e7, depth_m=2000.0)
+    """CHARACTERISATION, Finding 5.1, expressed as the number a user acts on.
+
+    Phase 14: the rate ceiling is NOT_VALIDATED (rule B) and needs a
+    caller-supplied criterion; the 3.20x ratio does not depend on it.
+    """
+    headroom_pa = allowable_delta_p_pa(initial_pressure_pa=1.6e7, depth_m=2000.0,
+                                       **CALLER_CRITERION)
     at_default = max_injection_rate_m3_s(allowable_delta_p_pa=headroom_pa, **BASE)
     at_well = max_injection_rate_m3_s(
         allowable_delta_p_pa=headroom_pa, **dict(BASE, radius_m=0.1)
     )
     assert at_default / at_well == pytest.approx(3.20, abs=0.02)
-    assert at_default == pytest.approx(0.1267, abs=0.001)
-    assert at_well == pytest.approx(0.0397, abs=0.001)
+    unit_default = theis_injection_delta_p_pa(rate_m3_s=1.0, **BASE)
+    unit_well = theis_injection_delta_p_pa(rate_m3_s=1.0, **dict(BASE, radius_m=0.1))
+    assert at_default == pytest.approx(headroom_pa / unit_default, rel=1e-12)
+    assert at_well == pytest.approx(headroom_pa / unit_well, rel=1e-12)
 
 
 # -- Finding 5.2: depth and initial pressure disagree ------------------------
@@ -202,15 +211,23 @@ def test_cli_default_depth_and_pressure_are_mutually_inconsistent():
 
 
 def test_inconsistent_defaults_inflate_the_headroom():
-    """CHARACTERISATION, Finding 5.2: 1.72x more headroom than is consistent."""
+    """CHARACTERISATION, Finding 5.2: the 16 MPa prior midpoint against the
+    2000 m default depth inflates headroom. Phase 14: headroom is NOT_VALIDATED
+    and its criterion is caller-supplied (rule B); the former 1.72x figure was
+    specific to the removed 15 000 Pa/m / 0.9 defaults."""
     from ccs_screen.ingest.scenario import STANDARD_GRAVITY_M_S2
 
     depth_m = 2000.0
-    as_shipped = allowable_delta_p_pa(initial_pressure_pa=1.6e7, depth_m=depth_m)
-    consistent = allowable_delta_p_pa(
-        initial_pressure_pa=1050.0 * STANDARD_GRAVITY_M_S2 * depth_m, depth_m=depth_m
-    )
-    assert as_shipped / consistent == pytest.approx(1.72, abs=0.02)
+    consistent_initial = 1050.0 * STANDARD_GRAVITY_M_S2 * depth_m
+    as_shipped = allowable_delta_p_pa(initial_pressure_pa=1.6e7, depth_m=depth_m,
+                                      **CALLER_CRITERION)
+    consistent = allowable_delta_p_pa(initial_pressure_pa=consistent_initial, depth_m=depth_m,
+                                      **CALLER_CRITERION)
+    limit = (CALLER_CRITERION["safety_factor"] * CALLER_CRITERION["fracture_gradient_pa_m"]
+             * depth_m)
+    assert as_shipped / consistent == pytest.approx(
+        (limit - 1.6e7) / (limit - consistent_initial), rel=1e-12)
+    assert as_shipped > consistent
 
 
 # -- Finding 5.3: brine analog ----------------------------------------------
@@ -296,8 +313,12 @@ def test_headroom_and_ceiling_are_proportional():
 
 
 def test_fracture_limit_uses_the_derated_gradient():
+    """Arithmetic only. Phase 14 (D1, rule B): the gradient and safety factor are
+    caller-supplied with no default; the values below are arbitrary test inputs."""
     depth_m, initial_pressure_pa = 2000.0, 1.6e7
-    expected = DEFAULT_SAFETY_FACTOR * depth_m * DEFAULT_FRACTURE_GRADIENT_PA_M - initial_pressure_pa
+    gradient, safety_factor = 17_000.0, 0.8
+    expected = safety_factor * depth_m * gradient - initial_pressure_pa
     assert allowable_delta_p_pa(
-        initial_pressure_pa=initial_pressure_pa, depth_m=depth_m
+        initial_pressure_pa=initial_pressure_pa, depth_m=depth_m,
+        fracture_gradient_pa_m=gradient, safety_factor=safety_factor,
     ) == pytest.approx(expected, rel=1e-15)

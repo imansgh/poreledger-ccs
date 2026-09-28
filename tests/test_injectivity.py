@@ -38,18 +38,42 @@ def test_better_permeability_allows_a_higher_rate():
     assert better > base
 
 
+# Phase 14 (Model Contract D1, rule B): no fracture gradient or safety factor is
+# approved and neither has a default. These tests exercise the arithmetic with
+# arbitrary caller-supplied values; the numbers carry no approval.
+CALLER_GRADIENT_PA_M = 17_000.0
+CALLER_SAFETY_FACTOR = 0.8
+
+
 def test_fracture_pressure_follows_the_gradient():
-    assert fracture_pressure_pa(2000.0) == pytest.approx(2000.0 * 15_000.0)
-    assert fracture_pressure_pa(2000.0, fracture_gradient_pa_m=16_000.0) > fracture_pressure_pa(2000.0)
+    assert fracture_pressure_pa(2000.0, CALLER_GRADIENT_PA_M) == pytest.approx(2000.0 * 17_000.0)
+    assert (fracture_pressure_pa(2000.0, fracture_gradient_pa_m=18_000.0)
+            > fracture_pressure_pa(2000.0, CALLER_GRADIENT_PA_M))
 
 
 def test_headroom_is_the_derated_fracture_pressure_minus_initial():
-    headroom = allowable_delta_p_pa(initial_pressure_pa=20e6, depth_m=2000.0, safety_factor=0.9)
-    assert headroom == pytest.approx(0.9 * 30e6 - 20e6)
+    headroom = allowable_delta_p_pa(initial_pressure_pa=20e6, depth_m=2000.0,
+                                    fracture_gradient_pa_m=CALLER_GRADIENT_PA_M,
+                                    safety_factor=CALLER_SAFETY_FACTOR)
+    assert headroom == pytest.approx(0.8 * 34e6 - 20e6)
 
 
 def test_overpressured_reservoir_has_no_injection_window():
-    assert allowable_delta_p_pa(initial_pressure_pa=30e6, depth_m=2000.0) == 0.0
+    assert allowable_delta_p_pa(initial_pressure_pa=30e6, depth_m=2000.0,
+                                fracture_gradient_pa_m=CALLER_GRADIENT_PA_M,
+                                safety_factor=CALLER_SAFETY_FACTOR) == 0.0
+
+
+@pytest.mark.parametrize("call", [
+    lambda: fracture_pressure_pa(2000.0),
+    lambda: allowable_delta_p_pa(initial_pressure_pa=20e6, depth_m=2000.0),
+    lambda: allowable_delta_p_pa(initial_pressure_pa=20e6, depth_m=2000.0,
+                                 fracture_gradient_pa_m=CALLER_GRADIENT_PA_M),
+])
+def test_fracture_criteria_have_no_default(call):
+    """D1: the uncited 15 000 Pa/m and SF = 0.9 defaults are removed, not hidden."""
+    with pytest.raises(TypeError):
+        call()
 
 
 def test_transmissivity_matches_kh_over_mu():
@@ -59,7 +83,8 @@ def test_transmissivity_matches_kh_over_mu():
 @pytest.mark.parametrize("bad", [{"safety_factor": 0.0}, {"safety_factor": 1.5}])
 def test_rejects_invalid_safety_factor(bad):
     with pytest.raises(ValueError):
-        allowable_delta_p_pa(initial_pressure_pa=20e6, depth_m=2000.0, **bad)
+        allowable_delta_p_pa(initial_pressure_pa=20e6, depth_m=2000.0,
+                             fracture_gradient_pa_m=CALLER_GRADIENT_PA_M, **bad)
 
 
 def test_rejects_non_positive_allowance():

@@ -7,8 +7,14 @@ assumes an infinite aquifer; three thicknesses coexist with no relational check;
 and the systematic bias is wider than the uncertainty band that is supposed to
 express it.
 
-The combined-effect tests use the convention ``factor = true / reported``, so a
-factor above 1 means the tool understates capacity.
+The Finding 12.4 tests characterise the audit's *conditional scenario product*
+of findings 3.1, 4.1 and 4.2 under a sea-level water level (11.1 excluded).
+Under the approved Model Contract (F1, F2) that product is historical audit
+material only: a scenario/sensitivity product, never an estimate of true or
+reported capacity and never a correction factor. The approved model replaces it
+with single joint scenario evaluation -- GROUND_REFERENCE as the baseline and
+SEA_LEVEL_SENSITIVITY vs GROUND_REFERENCE as the individual effect -- which the
+last section checks (F1; the wording here reconciles F3).
 
 See ``docs/scientific-validation-audit.md``, Phase 12 and the final summary.
 """
@@ -170,7 +176,9 @@ def test_temperature_pressure_depth_gap_costs_under_two_percent(
 
 
 def combined_factor(depth_m, temperature_k, elevation_m, net_to_gross):
-    """Conditional scenario product (sea-level water level) of findings 3.1, 4.1 and 4.2; 11.1 is not included; not an estimate of true / reported (Finding 12.4 is OPEN)."""
+    """Conditional scenario product of findings 3.1, 4.1 and 4.2 (sea-level water
+    level; 11.1 not included). Historical audit material (F2): not an estimate of
+    true or reported capacity and not a correction factor (F1)."""
     gauge = BRINE_DENSITY * GRAVITY * depth_m
     corrected = BRINE_DENSITY * GRAVITY * (depth_m - elevation_m)
 
@@ -185,38 +193,45 @@ def combined_factor(depth_m, temperature_k, elevation_m, net_to_gross):
 
 
 @pytest.mark.parametrize("well,depth_m,temperature_k,elevation_m", WELLS)
-def test_the_net_effect_is_an_understatement(well, depth_m, temperature_k, elevation_m):
-    """CHARACTERISATION, Finding 12.4 -- the result the freeze existed to produce.
+def test_the_conditional_scenario_product_exceeds_one(well, depth_m, temperature_k, elevation_m):
+    """CHARACTERISATION (historical, F2), Finding 12.4.
 
-    Excludes the EOS term (11.1), which needs CoolProp; including it lowers the
-    factors slightly but never below 1.
+    Under the sea-level scenario and the generic NTG range, the product of the
+    3.1, 4.1 and 4.2 terms exceeds 1. It is a conditional scenario product --
+    not a statement about true or reported capacity and not a correction (F1).
+    Excludes the EOS term (11.1), which needs CoolProp.
     """
     low = combined_factor(depth_m, temperature_k, elevation_m, NET_TO_GROSS_RANGE[1])
     high = combined_factor(depth_m, temperature_k, elevation_m, NET_TO_GROSS_RANGE[0])
-    assert low > 1.0, "the net direction must be an understatement"
+    assert low > 1.0, "the conditional product exceeds 1 under this scenario"
     assert high > low
-    assert high < 6.0, "and it should stay inside a plausible bound"
+    assert high < 6.0, "and it stays inside the audited bound"
 
 
 @pytest.mark.parametrize("well,depth_m,temperature_k,elevation_m", WELLS)
-def test_finding_31_dominates_every_other_bias(well, depth_m, temperature_k, elevation_m):
-    """Finding 12.4's decision structure: everything else moves it under 16%."""
+def test_the_31_term_dominates_the_conditional_product(well, depth_m, temperature_k, elevation_m):
+    """Finding 12.4's structure (historical, F2): without the 3.1 term the product
+    stays within 0.84-1.01. On the approved path 3.1 is resolved by the gross
+    formulation (A1, A4), so the term does not arise there."""
     without_31 = combined_factor(depth_m, temperature_k, elevation_m, 1.0)
-    assert 0.84 < without_31 < 1.01, "the non-3.1 biases should be a modest overstatement"
+    assert 0.84 < without_31 < 1.01, "without 3.1 the conditional product stays near 1"
 
     with_31_low = combined_factor(depth_m, temperature_k, elevation_m, NET_TO_GROSS_RANGE[1])
     assert with_31_low / without_31 == pytest.approx(1 / 0.75, rel=1e-9)
 
 
-def test_the_two_overstating_findings_run_the_same_way():
-    """4.2 and 11.1 both overstate, so they compound rather than offset."""
+def test_the_sea_level_scenario_state_has_the_lower_density():
+    """Finding 4.2 as a scenario contrast: evaluating the brine column from sea
+    level instead of ground level lowers CO2 density at the same temperature.
+    This is the direction of SEA_LEVEL_SENSITIVITY vs GROUND_REFERENCE, not a
+    measured error in either (M2)."""
     depth_m, temperature_k, elevation_m = 1527.5, 318.15, 310.0
     gauge = BRINE_DENSITY * GRAVITY * depth_m
     corrected = BRINE_DENSITY * GRAVITY * (depth_m - elevation_m)
     datum_factor = co2_density_kg_m3(corrected, temperature_k) / co2_density_kg_m3(
         gauge, temperature_k
     )
-    assert datum_factor < 1.0, "an uncorrected datum overstates capacity"
+    assert datum_factor < 1.0
 
 
 # -- Finding 12.5: bias vs band ----------------------------------------------
@@ -225,7 +240,10 @@ def test_the_two_overstating_findings_run_the_same_way():
 def test_the_systematic_bias_can_exceed_the_reported_band():
     """CHARACTERISATION, Finding 12.5 -- the audit's key interpretive result.
 
-    The true value can sit above P90, not merely near the edge of the band.
+    A systematic scenario effect can be larger than the sampled band, so the band
+    does not bracket it (S7: P10/P50/P90 are conditional on the declared model).
+    The comparison uses the historical conditional product (F2) as the size of
+    that effect; it is not an estimate of true capacity (F1).
     """
     depth_m, temperature_k, elevation_m = 1527.5, 318.15, 310.0
     pressure = BRINE_DENSITY * GRAVITY * depth_m
@@ -291,3 +309,43 @@ def test_injectivity_is_absent_from_the_public_surface():
             text = text.replace(token, "")
         assert "theis" not in text
         assert "permeability" not in text
+
+
+# -- F1: single joint scenario evaluation (approved model) --------------------
+
+
+def test_the_approved_model_reports_joint_scenarios_not_a_product():
+    """F1: baseline, individual effect and joint scenarios; never a multiplied factor."""
+    from ccs_screen.approved_model import (
+        StorageInterval,
+        WaterLevelScenario,
+        evaluate_approved_model,
+    )
+    from ccs_screen.ingest.identity import canonical_well_id
+    from ccs_screen.ingest.provenance import Confidence, FieldValue, Provenance, Unit
+    from ccs_screen.ingest.records import NormalizedWellRecord, TemperatureObservation
+    from ccs_screen.ingest.units import DepthDatum
+
+    depth_m, temperature_k, elevation_m = 1527.5, 318.15, 310.0
+    record = NormalizedWellRecord(identity=canonical_well_id("F1 PROBE 1"))
+    record.depth_m = FieldValue(value=depth_m, unit=Unit.METRE, provenance=Provenance.EXTRACTED,
+                                confidence=Confidence.HIGH)
+    record.surface_elevation_m = FieldValue(value=elevation_m, unit=Unit.METRE,
+                                            provenance=Provenance.EXTRACTED,
+                                            confidence=Confidence.MEDIUM)
+    record.depth_datum = DepthDatum.GROUND_LEVEL
+    record.temperatures = (TemperatureObservation(
+        depth_m=1500.0, temperature_k=temperature_k, method="extrapolated_squarci_taffi",
+        depth_datum=DepthDatum.GROUND_LEVEL),)
+    result = evaluate_approved_model(record, area_m2=8e7, interval=StorageInterval(1450.0, 1527.5),
+                                     n=400, seed=42)
+    effect = result.systematic_effect()
+    assert effect["baseline"] == WaterLevelScenario.GROUND_REFERENCE.value
+    assert effect["multiplied_correction_factor"] is None
+    (individual,) = effect["individual_effects"]
+    ground = result.scenario(WaterLevelScenario.GROUND_REFERENCE).capacity
+    sea = result.scenario(WaterLevelScenario.SEA_LEVEL_SENSITIVITY).capacity
+    assert individual["p50_difference_mt"] == sea.p50_mt - ground.p50_mt
+    assert individual["is_correction"] is False
+    # The contrast has the direction of the historical 4.2 term, as a scenario.
+    assert sea.p50_mt < ground.p50_mt

@@ -11,6 +11,13 @@ ground-to-sea water-level sensitivity (Finding 4.2 / 10.2 revision), narrower
 than Phase 4 estimated.
 
 See ``docs/scientific-validation-audit.md``, Phase 10.
+
+Phase 14. The Phase 10 checks below characterise the pre-contract screening
+path, now a NOT_VALIDATED legacy path with unchanged arithmetic (owner decision
+O2); they run the literature parameter set through the legacy resolver (its
+example JSON file) and are otherwise unchanged. Under the approved model every
+real well is UNAVAILABLE, because no ingested depth reference is established
+(C2); the last section pins that consequence.
 """
 
 from __future__ import annotations
@@ -46,6 +53,10 @@ SCREENABLE = ["SALUZZO|1", "TRECATE|9|ST", "DESANA|1", "ASTI|1", "MALOSSA|15"]
 
 USER_INPUTS = {"area_m2": 8.0e7, "thickness_m": 35.0}
 
+#: The literature parameter set through the legacy resolver (NOT_VALIDATED, O2).
+LEGACY_LITERATURE = str(Path(__file__).resolve().parents[1] / "examples"
+                        / "literature-screening-v1.json")
+
 
 @pytest.fixture(scope="module")
 def records():
@@ -59,7 +70,8 @@ def screened():
     from ccs_screen.api import screen_well
 
     return {
-        well: screen_well(well, user_inputs=USER_INPUTS, data_dir=str(DATA_DIR))
+        well: screen_well(well, user_inputs=USER_INPUTS, scenario=LEGACY_LITERATURE,
+                          data_dir=str(DATA_DIR))
         for well in AUDIT_WELLS
     }
 
@@ -97,10 +109,14 @@ def test_omitting_user_inputs_returns_the_other_blocked_shape():
     """Two distinct blocked payloads exist; a client must handle both."""
     from ccs_screen.api import screen_well
 
-    result = screen_well("SALUZZO|1", user_inputs=None, data_dir=str(DATA_DIR))
+    result = screen_well("SALUZZO|1", user_inputs=None, scenario=LEGACY_LITERATURE,
+                         data_dir=str(DATA_DIR))
     assert result["status"] == "blocked"
     assert {f["field"] for f in result["required_user_inputs"]} == {"area_m2", "thickness_m"}
     assert "missing_fields" not in result, "the two blocked shapes must stay distinct"
+    approved = screen_well("SALUZZO|1", user_inputs=None, data_dir=str(DATA_DIR))
+    assert approved["status"] == "blocked"
+    assert {f["field"] for f in approved["required_user_inputs"]} == {"area_m2", "z_top", "z_base"}
 
 
 # -- label partition ---------------------------------------------------------
@@ -168,8 +184,10 @@ def test_percentiles_are_ordered_and_positive(screened, well):
 def test_repeat_calls_are_bit_identical():
     from ccs_screen.api import screen_well
 
-    first = screen_well("SALUZZO|1", user_inputs=USER_INPUTS, data_dir=str(DATA_DIR))
-    second = screen_well("SALUZZO|1", user_inputs=USER_INPUTS, data_dir=str(DATA_DIR))
+    first = screen_well("SALUZZO|1", user_inputs=USER_INPUTS, scenario=LEGACY_LITERATURE,
+                        data_dir=str(DATA_DIR))
+    second = screen_well("SALUZZO|1", user_inputs=USER_INPUTS, scenario=LEGACY_LITERATURE,
+                         data_dir=str(DATA_DIR))
     assert first["scenario_based_capacity_mt"] == second["scenario_based_capacity_mt"]
 
 
@@ -326,3 +344,31 @@ def test_every_result_declares_itself_uncertified(screened, well):
 def test_every_screened_result_carries_the_scale_mismatch_warning(screened, well):
     warnings = screened[well]["interpretation"]["warnings"]
     assert any(w["code"] == "scale_mismatch_basin_vs_closure" for w in warnings)
+
+
+@pytest.mark.parametrize("well", AUDIT_WELLS)
+def test_every_legacy_result_is_labelled_not_validated(screened, well):
+    assert screened[well]["validation_status"] == "NOT_VALIDATED"
+
+
+# -- Phase 14: the approved model on real data (C2) ---------------------------
+
+
+@pytest.mark.parametrize("well", AUDIT_WELLS)
+def test_every_real_well_is_unavailable_under_the_approved_model(records, well):
+    """No ingested depth reference is established, so no approved number exists."""
+    from ccs_screen.api import screen_well
+
+    assert records[well].depth_datum is DepthDatum.UNKNOWN
+    td = records[well].depth_m.value if records[well].depth_m.is_present else 1000.0
+    result = screen_well(well, {"area_m2": 8.0e7, "z_top": max(float(td) - 200.0, 0.0),
+                                "z_base": float(td)},
+                         data_dir=str(DATA_DIR), samples=20)
+    assert result["status"] == "evaluated"
+    assert result["depth_reference"]["diagnostics"][0]["code"] == (
+        "DEPTH_REFERENCE_NOT_ESTABLISHED")
+    for scenario in result["water_level_scenarios"]:
+        assert scenario["validation_status"] == "UNAVAILABLE"
+        assert scenario["capacity_mt"] is None
+        assert scenario["diagnostic_capacity_mt"] is None
+    assert result["interpretation"]["certified"] is False

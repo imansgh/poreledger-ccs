@@ -44,17 +44,90 @@ def test_narrower_porosity_prior_lowers_capacity(capsys):
     assert high > low
 
 
+#: Phase 14 (D1, rule B): no fracture criterion is approved or defaulted. These
+#: arbitrary caller-supplied values exercise the NOT_VALIDATED arithmetic.
+CALLER_CRITERION = ["--fracture-gradient-pa-m", "17000", "--safety-factor", "0.8"]
+FRACTURE_OUTPUTS = ("fracture_pressure_pa", "allowable_delta_p_pa", "max_rate_m3_s",
+                    "within_limit")
+
+
 def test_overpressured_case_reports_no_injection_window(capsys):
-    main(["--samples", "100", "--pressure-pa", "34e6", "35e6", "--depth-m", "2000", "--json"])
+    main(["--samples", "100", "--pressure-pa", "34e6", "35e6", "--depth-m", "2000", "--json",
+          *CALLER_CRITERION])
     inj = json.loads(capsys.readouterr().out)["injectivity"]
     assert inj["allowable_delta_p_pa"] == 0.0
     assert inj["max_rate_m3_s"] == 0.0
     assert inj["within_limit"] is False
+    assert inj["output_status"]["within_limit"] == "NOT_VALIDATED"
 
 
 def test_excessive_rate_is_flagged_as_over_the_limit(capsys):
-    main(["--samples", "100", "--rate-m3-s", "5.0", "--json"])
+    main(["--samples", "100", "--rate-m3-s", "5.0", "--json", *CALLER_CRITERION])
     assert json.loads(capsys.readouterr().out)["injectivity"]["within_limit"] is False
+
+
+# -- Phase 14: O1 and rule B labels -------------------------------------------
+
+
+def test_every_output_is_labelled_not_validated(capsys):
+    """O1: the CLI capacity path is outside the approved Model Contract."""
+    assert main(["--samples", "100", "--json"]) == 0
+    report = json.loads(capsys.readouterr().out)
+    assert report["validation_status"] == "NOT_VALIDATED"
+    assert "owner decision O1" in report["scope"]
+    assert report["capacity_mt"]["validation_status"] == "NOT_VALIDATED"
+    assert report["surrogate"]["validation_status"] == "NOT_VALIDATED"
+    assert report["sensitivity_validation_status"] == "NOT_VALIDATED"
+    assert report["injectivity"]["validation_status"] == "NOT_VALIDATED"
+
+
+def test_fracture_outputs_are_unavailable_without_a_supplied_criterion(capsys):
+    """Rule B: no default criterion, so no fracture-dependent number is produced."""
+    main(["--samples", "100", "--json"])
+    inj = json.loads(capsys.readouterr().out)["injectivity"]
+    for name in FRACTURE_OUTPUTS:
+        assert inj[name] is None, name
+        assert inj["output_status"][name] == "UNAVAILABLE", name
+        assert "no default" in inj["unavailable_reasons"][name]
+    assert inj["caller_supplied_criteria"] == {"fracture_gradient_pa_m": None,
+                                               "safety_factor": None}
+    # The Theis outputs remain, as NOT_VALIDATED diagnostics.
+    assert inj["planned_delta_p_pa"] > 0
+    assert inj["output_status"]["planned_delta_p_pa"] == "NOT_VALIDATED"
+    assert inj["output_status"]["initial_pressure_pa"] == "NOT_VALIDATED"
+
+
+def test_a_supplied_criterion_is_used_and_labelled_not_validated(capsys):
+    main(["--samples", "100", "--json", *CALLER_CRITERION])
+    inj = json.loads(capsys.readouterr().out)["injectivity"]
+    assert inj["fracture_pressure_pa"] == 2000.0 * 17000.0
+    for name in FRACTURE_OUTPUTS:
+        assert inj["output_status"][name] == "NOT_VALIDATED", name
+    assert inj["unavailable_reasons"] == {}
+
+
+def test_a_gradient_without_a_safety_factor_leaves_the_headroom_unavailable(capsys):
+    main(["--samples", "100", "--json", "--fracture-gradient-pa-m", "17000"])
+    inj = json.loads(capsys.readouterr().out)["injectivity"]
+    assert inj["fracture_pressure_pa"] == 2000.0 * 17000.0
+    assert inj["output_status"]["fracture_pressure_pa"] == "NOT_VALIDATED"
+    for name in ("allowable_delta_p_pa", "max_rate_m3_s", "within_limit"):
+        assert inj[name] is None and inj["output_status"][name] == "UNAVAILABLE"
+
+
+def test_fracture_flags_have_no_default():
+    args = build_parser().parse_args([])
+    assert args.fracture_gradient_pa_m is None
+    assert args.safety_factor is None
+
+
+def test_text_output_states_the_labels(capsys):
+    main(["--samples", "100"])
+    out = capsys.readouterr().out
+    assert "NOT_VALIDATED demo output (owner decision O1)" in out
+    assert "Capacity (NOT_VALIDATED)" in out
+    assert "verdict                    : UNAVAILABLE" in out
+    assert "no default" in out
 
 
 def test_invalid_prior_range_exits_with_an_error(capsys):
@@ -79,6 +152,7 @@ def test_parser_exposes_a_range_flag_per_prior():
         (["--samples", "-5"], "--samples must be a positive integer"),
         (["--safety-factor", "1.5"], "safety_factor must be in (0, 1]"),
         (["--safety-factor", "0"], "safety_factor must be in (0, 1]"),
+        (["--fracture-gradient-pa-m", "0"], "fracture_gradient_pa_m must be positive"),
     ],
 )
 def test_semantic_errors_report_exit_2_and_a_specific_reason(args, fragment, capsys):

@@ -1,19 +1,26 @@
 """HTTP endpoint contract, via FastAPI's TestClient.
 
 The HTTP layer must be a pure translation: the same payloads, the same
-provenance, the same refusals. The most important test here is
-``test_response_model_does_not_drop_provenance`` -- FastAPI filters responses
+provenance, the same refusals. The most important tests here are the
+``test_response_model_does_not_drop_*`` pair -- FastAPI filters responses
 against the declared model, so an over-tight schema would silently delete the
 audit trail while every other test still passed.
+
+Phase 14: the default scenario runs the approved model (inputs ``area_m2``,
+``z_top``, ``z_base``; both named water-level scenarios). Over HTTP only
+built-in scenario names are accepted, so the legacy provenance partition is
+exercised with the NOT_VALIDATED placeholder scenarios (owner decision O2).
 """
 
 from __future__ import annotations
 
+import dataclasses
 import json
 
 import pytest
 
 from ccs_screen import api
+from ccs_screen.ingest.units import DepthDatum
 from ccs_screen.config import REQUIRED_FIELDS
 from ccs_screen.ingest.scenario import BUILTIN_SCENARIOS
 
@@ -28,7 +35,10 @@ from fastapi.testclient import TestClient  # noqa: E402
 from ccs_screen.web.app import create_app  # noqa: E402
 from ccs_screen.web.settings import Settings  # noqa: E402
 
-VALID = {"area_m2": 8.0e7, "thickness_m": 35.0}
+#: Approved-model inputs (default scenario).
+VALID = {"area_m2": 8.0e7, "z_top": 1400.0, "z_base": 1527.0}
+#: Legacy inputs, for the NOT_VALIDATED placeholder scenarios (O2).
+LEGACY = {"area_m2": 8.0e7, "thickness_m": 35.0}
 ORIGIN = "http://localhost:3000"
 
 
@@ -58,6 +68,28 @@ def screen_body(**kw):
     return body
 
 
+def legacy_body(**kw):
+    body = {"user_inputs": dict(LEGACY), "samples": 200, "scenario": "sensitivity"}
+    body.update(kw)
+    return body
+
+
+@pytest.fixture
+def ground_level(data_dir, monkeypatch):
+    """SALUZZO|1 with a ground-level reference (test-only; C2 blocks real wells)."""
+    records = []
+    for record in api.load_records(str(data_dir)):
+        if record.canonical_id == "SALUZZO|1":
+            record = dataclasses.replace(
+                record, depth_datum=DepthDatum.GROUND_LEVEL,
+                temperatures=tuple(dataclasses.replace(o, depth_datum=DepthDatum.GROUND_LEVEL)
+                                   for o in record.temperatures))
+        records.append(record)
+    frozen = tuple(records)
+    monkeypatch.setattr(api, "load_records", lambda *_a, **_k: frozen)
+    yield data_dir
+
+
 # -- health ------------------------------------------------------------------
 
 
@@ -82,6 +114,9 @@ def test_list_wells(client):
     entry = next(w for w in wells if w["well_id"] == "SALUZZO|1")
     assert entry["has_temperature"] is True
     assert entry["screenable_without_user_inputs"] is False
+    assert entry["depth_datum"] == "unknown"
+    assert entry["approved_model_depth_reference"]["diagnostic"] == (
+        "DEPTH_REFERENCE_NOT_ESTABLISHED")
 
 
 def test_get_well(client):
@@ -104,8 +139,13 @@ def test_required_inputs_endpoint(client):
     assert response.status_code == 200
     payload = response.json()
     fields = {f["field"] for f in payload["required"]}
-    assert fields == {"area_m2", "thickness_m"}
-    assert payload["can_be_screened_with_user_inputs"] is True
+    assert fields == {"area_m2", "z_top", "z_base"}
+    assert payload["model_path"] == "APPROVED_MODEL"
+    # C2: no ingested well has an established depth reference.
+    assert payload["can_be_screened_with_user_inputs"] is False
+    legacy = client.get("/wells/SALUZZO|1/inputs", params={"scenario": "sensitivity"}).json()
+    assert {f["field"] for f in legacy["required"]} == {"area_m2", "thickness_m"}
+    assert legacy["validation_status"] == "NOT_VALIDATED"
 
 
 def test_inputs_route_is_not_swallowed_by_the_well_route(client):
@@ -121,11 +161,36 @@ def test_unknown_well_on_inputs_returns_404(client):
 # -- screening ---------------------------------------------------------------
 
 
-def test_successful_screening(client):
+def test_approved_screening_reports_both_named_scenarios(client):
     response = client.post("/wells/SALUZZO|1/screen", json=screen_body())
     assert response.status_code == 200
     payload = response.json()
+    assert payload["status"] == "evaluated"
+    assert payload["model_path"] == "APPROVED_MODEL"
+    names = [s["name"] for s in payload["water_level_scenarios"]]
+    assert names == ["GROUND_REFERENCE", "SEA_LEVEL_SENSITIVITY"]
+    for scenario in payload["water_level_scenarios"]:
+        # C2 consequence on real data: UNAVAILABLE, never a number.
+        assert scenario["validation_status"] == "UNAVAILABLE"
+        assert scenario["capacity_mt"] is None
+
+
+def test_successful_approved_screening_over_http(client, ground_level):
+    payload = client.post("/wells/SALUZZO|1/screen", json=screen_body()).json()
+    for scenario in payload["water_level_scenarios"]:
+        assert scenario["validation_status"] == "VALIDATED"
+        capacity = scenario["capacity_mt"]
+        assert capacity["p10"] < capacity["p50"] < capacity["p90"]
+        assert capacity["n_samples"] == 200
+
+
+def test_successful_legacy_screening_is_not_validated(client):
+    response = client.post("/wells/SALUZZO|1/screen", json=legacy_body())
+    assert response.status_code == 200
+    payload = response.json()
     assert payload["status"] == "screened"
+    assert payload["validation_status"] == "NOT_VALIDATED"
+    assert payload["model_path"] == "LEGACY_NOT_VALIDATED"
     capacity = payload["scenario_based_capacity_mt"]
     assert capacity["p10"] < capacity["p50"] < capacity["p90"]
     assert capacity["n_samples"] == 200
@@ -133,12 +198,15 @@ def test_successful_screening(client):
 
 def test_blocked_screening_is_200_not_an_error(client):
     """A well that cannot be screened is an outcome, not a failure."""
-    response = client.post("/wells/ASIGLIANO|1/screen", json=screen_body(samples=50))
+    response = client.post("/wells/ASIGLIANO|1/screen", json=legacy_body(samples=50))
     assert response.status_code == 200
     payload = response.json()
     assert payload["status"] == "blocked"
     assert payload["scenario_based_capacity_mt"] is None
     assert "temperature_k" in payload["missing_fields"]
+    approved = client.post("/wells/SALUZZO|1/screen",
+                           json=screen_body(user_inputs={"area_m2": 8e7})).json()
+    assert approved["status"] == "blocked" and approved["model_path"] == "APPROVED_MODEL"
 
 
 def test_screening_unknown_well_returns_404(client):
@@ -146,25 +214,69 @@ def test_screening_unknown_well_returns_404(client):
     assert response.status_code == 404
 
 
-def test_user_inputs_drive_the_http_result(client):
-    small = client.post("/wells/SALUZZO|1/screen", json=screen_body(
+def test_user_inputs_drive_the_http_result(client, ground_level):
+    small = client.post("/wells/SALUZZO|1/screen", json=legacy_body(
         user_inputs={"area_m2": 5e7, "thickness_m": 25.0})).json()
-    large = client.post("/wells/SALUZZO|1/screen", json=screen_body(
+    large = client.post("/wells/SALUZZO|1/screen", json=legacy_body(
         user_inputs={"area_m2": 1.5e8, "thickness_m": 55.0})).json()
     assert (large["scenario_based_capacity_mt"]["p50"]
             > small["scenario_based_capacity_mt"]["p50"])
+    thin = client.post("/wells/SALUZZO|1/screen", json=screen_body(
+        user_inputs={"area_m2": 8e7, "z_top": 1480.0, "z_base": 1527.0})).json()
+    thick = client.post("/wells/SALUZZO|1/screen", json=screen_body(
+        user_inputs={"area_m2": 8e7, "z_top": 1400.0, "z_base": 1527.0})).json()
+    p50 = lambda r: r["water_level_scenarios"][0]["capacity_mt"]["p50"]  # noqa: E731
+    assert p50(thick) > p50(thin)
 
 
 # -- request validation ------------------------------------------------------
 
 
-@pytest.mark.parametrize("missing", ["area_m2", "thickness_m"])
-def test_missing_user_input_is_rejected(client, missing):
+def test_missing_area_is_rejected_by_the_schema(client):
     body = screen_body()
-    del body["user_inputs"][missing]
+    del body["user_inputs"]["area_m2"]
     response = client.post("/wells/SALUZZO|1/screen", json=body)
     assert response.status_code == 422
-    assert missing in json.dumps(response.json())
+    assert "area_m2" in json.dumps(response.json())
+
+
+@pytest.mark.parametrize("missing", ["z_top", "z_base"])
+def test_missing_interval_bound_blocks_and_names_it(client, missing):
+    """Which inputs are required depends on the path, so the API decides (200 blocked)."""
+    body = screen_body()
+    del body["user_inputs"][missing]
+    payload = client.post("/wells/SALUZZO|1/screen", json=body).json()
+    assert payload["status"] == "blocked"
+    assert missing in payload["error"]
+
+
+def test_thickness_is_refused_by_the_approved_model_over_http(client):
+    payload = client.post("/wells/SALUZZO|1/screen", json=screen_body(
+        user_inputs={**VALID, "thickness_m": 35.0})).json()
+    assert payload["status"] == "blocked"
+    assert "not an input of the approved model" in payload["error"]
+
+
+def test_legacy_scenario_still_requires_thickness(client):
+    payload = client.post("/wells/SALUZZO|1/screen",
+                          json=legacy_body(user_inputs={"area_m2": 8e7})).json()
+    assert payload["status"] == "blocked"
+    assert "thickness_m" in payload["error"]
+    assert payload["validation_status"] == "NOT_VALIDATED"
+
+
+@pytest.mark.parametrize("bad", [{"z_top": -1.0}, {"z_base": 0.0}, {"z_base": -10.0}])
+def test_out_of_domain_interval_is_rejected_by_the_schema(client, bad):
+    response = client.post("/wells/SALUZZO|1/screen", json=screen_body(
+        user_inputs={**VALID, **bad}))
+    assert response.status_code == 422
+
+
+def test_inverted_interval_blocks(client):
+    payload = client.post("/wells/SALUZZO|1/screen", json=screen_body(
+        user_inputs={"area_m2": 8e7, "z_top": 1500.0, "z_base": 1400.0})).json()
+    assert payload["status"] == "blocked"
+    assert "z_top < z_base" in payload["error"]
 
 
 def test_missing_user_inputs_object_is_rejected(client):
@@ -174,7 +286,7 @@ def test_missing_user_inputs_object_is_rejected(client):
 @pytest.mark.parametrize("bad", [0, -1, -5e7])
 def test_non_positive_area_is_rejected(client, bad):
     response = client.post("/wells/SALUZZO|1/screen",
-                           json=screen_body(user_inputs={"area_m2": bad, "thickness_m": 35.0}))
+                           json=screen_body(user_inputs={**VALID, "area_m2": bad}))
     assert response.status_code == 422
 
 
@@ -188,7 +300,7 @@ def test_non_positive_thickness_is_rejected(client, bad):
 @pytest.mark.parametrize("bad", ["large", None, [1], {"v": 1}])
 def test_non_numeric_area_is_rejected(client, bad):
     response = client.post("/wells/SALUZZO|1/screen",
-                           json=screen_body(user_inputs={"area_m2": bad, "thickness_m": 35.0}))
+                           json=screen_body(user_inputs={**VALID, "area_m2": bad}))
     assert response.status_code == 422
 
 
@@ -220,7 +332,9 @@ def test_unknown_top_level_field_is_rejected(client):
 def test_valid_samples_accepted(client, samples):
     response = client.post("/wells/SALUZZO|1/screen", json=screen_body(samples=samples))
     assert response.status_code == 200
-    assert response.json()["scenario_based_capacity_mt"]["n_samples"] == samples
+    assert response.json()["n_samples"] == samples
+    legacy = client.post("/wells/SALUZZO|1/screen", json=legacy_body(samples=samples)).json()
+    assert legacy["scenario_based_capacity_mt"]["n_samples"] == samples
 
 
 @pytest.mark.parametrize("samples", [0, -1, api.MAX_SAMPLES + 1, 10_000_000, 2.5, "2000", None])
@@ -244,60 +358,97 @@ def test_funnel_samples_are_bounded(client):
 # -- provenance serialisation ------------------------------------------------
 
 
-def test_response_model_does_not_drop_provenance(client, data_dir):
-    """FastAPI filters responses; nothing from the Python payload may vanish."""
-    api.clear_cache()
-    http = client.post("/wells/SALUZZO|1/screen",
-                       json=screen_body(samples=200, seed=42)).json()
-    python = api.screen_well("SALUZZO|1", VALID, data_dir=str(data_dir),
-                             samples=200, seed=42)
+def _keys(d, prefix=""):
+    out = set()
+    for k, v in d.items():
+        out.add(prefix + k)
+        if isinstance(v, dict):
+            out |= _keys(v, prefix + k + ".")
+        elif isinstance(v, list):
+            for i, item in enumerate(v):
+                if isinstance(item, dict):
+                    out |= _keys(item, f"{prefix}{k}[{i}].")
+    return out
 
-    def keys(d, prefix=""):
-        out = set()
-        for k, v in d.items():
-            out.add(prefix + k)
-            if isinstance(v, dict):
-                out |= keys(v, prefix + k + ".")
-        return out
 
-    dropped = keys(python) - keys(http)
+def _assert_http_matches_python(http, python):
+    dropped = _keys(python) - _keys(http)
     assert not dropped, f"response_model dropped: {sorted(dropped)}"
-
     trimmed = {k: v for k, v in http.items() if k in python}
     assert json.dumps(trimmed, sort_keys=True) == json.dumps(python, sort_keys=True)
 
 
+def test_response_model_does_not_drop_provenance(client, data_dir):
+    """FastAPI filters responses; nothing from the Python payload may vanish (legacy)."""
+    api.clear_cache()
+    http = client.post("/wells/SALUZZO|1/screen",
+                       json=legacy_body(samples=200, seed=42)).json()
+    python = api.screen_well("SALUZZO|1", LEGACY, scenario="sensitivity",
+                             data_dir=str(data_dir), samples=200, seed=42)
+    _assert_http_matches_python(http, python)
+
+
+def test_response_model_does_not_drop_the_approved_payload(client, ground_level):
+    """The approved payload -- scenarios, statuses, diagnostics -- passes through whole."""
+    http = client.post("/wells/SALUZZO|1/screen", json=screen_body(samples=200, seed=42)).json()
+    python = api.screen_well("SALUZZO|1", VALID, data_dir=str(ground_level),
+                             samples=200, seed=42)
+    _assert_http_matches_python(http, python)
+    assert set(http) == set(python), "the approved response acquired or lost keys"
+
+
+def test_response_model_does_not_drop_an_unavailable_approved_payload(client, data_dir):
+    api.clear_cache()
+    http = client.post("/wells/SALUZZO|1/screen", json=screen_body(samples=50, seed=1)).json()
+    python = api.screen_well("SALUZZO|1", VALID, data_dir=str(data_dir), samples=50, seed=1)
+    _assert_http_matches_python(http, python)
+    assert set(http) == set(python)
+
+
+def test_screen_response_paths_match_the_api():
+    from ccs_screen.web.schemas import SCREEN_RESPONSE_PATHS
+
+    assert set(SCREEN_RESPONSE_PATHS) == {api.APPROVED_MODEL_PATH, api.LEGACY_MODEL_PATH}
+
+
 def test_partition_is_disjoint_over_http(client):
-    payload = client.post("/wells/SALUZZO|1/screen", json=screen_body()).json()
+    payload = client.post("/wells/SALUZZO|1/screen", json=legacy_body()).json()
     buckets = {k: payload[k] for k in api.INPUT_PARTITION_KEYS}
     flat = [n for names in buckets.values() for n in names]
     assert len(flat) == len(set(flat))
     assert set(flat) == set(REQUIRED_FIELDS)
 
 
-def test_all_four_labels_survive_http(client):
-    payload = client.post("/wells/SALUZZO|1/screen", json=screen_body()).json()
+def test_legacy_labels_survive_http(client):
+    """The four-label partition belongs to the legacy resolver. Over HTTP the
+    literature parameter set now runs the approved model, so MODELLED (pressure
+    derived from depth by the legacy resolver) is no longer reachable with a
+    built-in name; the placeholder scenario carries the other three."""
+    payload = client.post("/wells/SALUZZO|1/screen", json=legacy_body()).json()
     labels = {i["label"] for i in payload["screening_inputs"].values()}
-    assert labels == {"source", "MODELLED", "ASSUMED", "USER"}
+    assert labels == {"source", "ASSUMED", "USER"}
 
 
 def test_every_input_has_its_provenance_fields_over_http(client):
-    payload = client.post("/wells/SALUZZO|1/screen", json=screen_body()).json()
+    payload = client.post("/wells/SALUZZO|1/screen", json=legacy_body()).json()
     for name, entry in payload["screening_inputs"].items():
         for key in ("value", "unit", "evidence_class", "assumed", "provenance", "label"):
             assert key in entry, f"{name} lost {key}"
 
 
 def test_citations_survive_http(client):
-    inputs = client.post("/wells/SALUZZO|1/screen", json=screen_body()).json()["screening_inputs"]
-    assert inputs["storage_efficiency"]["citation"]["year"] == 2008
-    assert inputs["porosity"]["citation"]["year"] == 2011
+    """S10: the approved priors carry their citations over HTTP."""
+    sampled = client.post("/wells/SALUZZO|1/screen", json=screen_body()).json()["sampled_inputs"]
+    assert sampled["storage_efficiency"]["citation"]["year"] == 2008
+    assert sampled["porosity"]["citation"]["year"] == 2011
+    assert sampled["brine_density_kg_m3"]["provenance"].startswith("PROJECT ASSUMPTION")
+    inputs = client.post("/wells/SALUZZO|1/screen", json=legacy_body()).json()["screening_inputs"]
     assert inputs["area_m2"]["citation"]["evidence_class"] == "user_input"
 
 
 def test_blocked_response_keeps_the_null_capacity_key(client):
     """A client must be able to read the null, not infer it from absence."""
-    payload = client.post("/wells/ASIGLIANO|1/screen", json=screen_body(samples=50)).json()
+    payload = client.post("/wells/ASIGLIANO|1/screen", json=legacy_body(samples=50)).json()
     assert "scenario_based_capacity_mt" in payload
     assert payload["scenario_based_capacity_mt"] is None
 
@@ -306,12 +457,16 @@ def test_blocked_response_keeps_the_null_capacity_key(client):
 
 
 def test_interpretation_over_http(client):
-    payload = client.post("/wells/SALUZZO|1/screen", json=screen_body()).json()
-    interpretation = payload["interpretation"]
-    assert interpretation["type"] == "scenario_based_capacity"
-    assert interpretation["site_specific"] is False
-    assert interpretation["certified"] is False
-    assert interpretation["proven_resource"] is False
+    for body in (screen_body(), legacy_body()):
+        interpretation = client.post("/wells/SALUZZO|1/screen", json=body).json()["interpretation"]
+        assert interpretation["type"] == "scenario_based_capacity"
+        assert interpretation["site_specific"] is False
+        assert interpretation["certified"] is False
+        assert interpretation["proven_resource"] is False
+    approved = client.post("/wells/SALUZZO|1/screen", json=screen_body()).json()["interpretation"]
+    assert "storage_interval_policy" in approved and "net_thickness_policy" not in approved
+    legacy = client.post("/wells/SALUZZO|1/screen", json=legacy_body()).json()["interpretation"]
+    assert "net_thickness_policy" in legacy and "storage_interval_policy" not in legacy
 
 
 def test_scale_mismatch_warning_over_http(client):
@@ -326,8 +481,10 @@ def test_interpretation_on_every_endpoint(client):
         client.get("/wells/SALUZZO|1/inputs").json(),
         client.get("/funnel?samples=20").json(),
         client.post("/wells/SALUZZO|1/screen", json=screen_body()).json(),
+        client.post("/wells/SALUZZO|1/screen", json=legacy_body()).json(),
         client.post("/wells/SALUZZO|1/temperature",
-                    json=screen_body(samples=50)).json(),
+                    json={"user_inputs": LEGACY, "samples": 50}).json(),
+        client.get("/funnel?samples=20&scenario=none").json(),
     ]
     for payload in payloads:
         assert payload["interpretation"]["type"] == "scenario_based_capacity"
@@ -337,13 +494,23 @@ def test_interpretation_on_every_endpoint(client):
 
 
 def test_temperature_comparison_endpoint(client):
-    response = client.post("/wells/SALUZZO|1/temperature", json=screen_body(samples=100))
+    """O2 consequence 2: a NOT_VALIDATED legacy diagnostic with legacy inputs."""
+    response = client.post("/wells/SALUZZO|1/temperature",
+                           json={"user_inputs": LEGACY, "samples": 100})
     assert response.status_code == 200
     payload = response.json()
     assert payload["status"] == "compared"
     assert payload["selected_method"] == "extrapolated_squarci_taffi"
     assert len(payload["variants"]) >= 2
     assert payload["p50_spread_percent"] > 0
+    assert payload["validation_status"] == "NOT_VALIDATED"
+
+
+def test_temperature_comparison_refuses_the_approved_interval(client):
+    payload = client.post("/wells/SALUZZO|1/temperature",
+                          json={"user_inputs": VALID, "samples": 50}).json()
+    assert payload["status"] == "blocked"
+    assert "legacy diagnostic" in payload["error"]
 
 
 def test_temperature_endpoint_requires_user_inputs(client):
@@ -356,14 +523,20 @@ def test_temperature_endpoint_requires_user_inputs(client):
 def test_scenarios_endpoint(client):
     response = client.get("/scenarios")
     assert response.status_code == 200
-    names = {s["name"] for s in response.json()}
-    assert "literature-screening-v1" in names
+    entries = {s["name"]: s for s in response.json()}
+    assert entries["literature-screening-v1"]["validation_status"] == "APPROVED_MODEL"
+    assert entries["sensitivity-placeholder"]["validation_status"] == "NOT_VALIDATED"
 
 
 def test_funnel_endpoint_reports_zero_from_source_alone(client):
-    payload = client.get("/funnel?samples=20").json()
-    assert payload["source_complete"] == 0
-    assert payload["screenable"] == 0
+    approved = client.get("/funnel?samples=20").json()
+    assert approved["model_path"] == "APPROVED_MODEL"
+    assert approved["approved_results_computed"] == 0
+    assert approved["depth_reference"]["ESTABLISHED_GROUND_LEVEL"] == 0
+    legacy = client.get("/funnel?samples=20&scenario=none").json()
+    assert legacy["source_complete"] == 0
+    assert legacy["screenable"] == 0
+    assert legacy["validation_status"] == "NOT_VALIDATED"
 
 
 def test_unknown_scenario_maps_to_400(client):

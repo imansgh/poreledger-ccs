@@ -14,6 +14,12 @@ about how uncertain a site is.
 Statistical tests are seeded and their thresholds are set well outside the
 measured values, so they do not flake.
 
+Phase 14. The "real-data path" priors below describe the pre-contract screening
+path, now a NOT_VALIDATED legacy path (O2). The approved model samples exactly
+porosity, brine density and E (S6); area, h_g, temperature and the water level
+are deterministic, pressure varies only through brine density, and every draw is
+kept (M4). The last section pins that.
+
 See ``docs/scientific-validation-audit.md``, Phase 7.
 """
 
@@ -342,3 +348,28 @@ def test_megatonne_conversion_is_applied_once():
         storage_efficiency=sample.storage_efficiency,
     )
     assert sample_mass_mt(sample) == pytest.approx(expected_kg / KG_PER_MT, rel=1e-15)
+
+
+# -- Phase 14: the approved model's Monte Carlo (S6, M2, M4) ------------------
+
+
+def test_approved_model_samples_only_the_declared_priors():
+    from ccs_screen.approved_model import APPROVED_PRIORS, draw_realisations
+
+    draws = draw_realisations(area_m2=8e7, h_g_m=100.0, temperature_k=330.0,
+                              priors=APPROVED_PRIORS, n=5_000, seed=42)
+    varying = sorted(name for name, x in draws.items() if x.max() > x.min())
+    assert varying == ["brine_density_kg_m3", "porosity", "storage_efficiency"]
+    for name in varying:
+        assert len(draws[name]) == 5_000
+
+
+def test_approved_model_draws_are_reproducible_and_seed_dependent():
+    from ccs_screen.approved_model import APPROVED_PRIORS, draw_realisations
+
+    kwargs = dict(area_m2=8e7, h_g_m=100.0, temperature_k=330.0, priors=APPROVED_PRIORS, n=200)
+    first = draw_realisations(seed=1, **kwargs)
+    again = draw_realisations(seed=1, **kwargs)
+    other = draw_realisations(seed=2, **kwargs)
+    assert all(np.array_equal(first[k], again[k]) for k in first)
+    assert not np.array_equal(first["porosity"], other["porosity"])

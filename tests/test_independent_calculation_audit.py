@@ -246,11 +246,15 @@ def test_theis_drawdown_agrees():
 
 
 def test_rate_ceiling_agrees():
+    """Arithmetic only. Phase 14 (D1, rule B): the fracture criterion has no
+    default; 17 000 Pa/m and 0.8 are arbitrary caller-supplied test values."""
     from ccs_screen.pressure import allowable_delta_p_pa, max_injection_rate_m3_s
 
-    headroom = max(0.9 * 2000.0 * 15000.0 - 1.6e7, 0.0)
+    headroom = max(0.8 * 2000.0 * 17000.0 - 1.6e7, 0.0)
     assert headroom == pytest.approx(
-        allowable_delta_p_pa(initial_pressure_pa=1.6e7, depth_m=2000.0), rel=1e-15
+        allowable_delta_p_pa(initial_pressure_pa=1.6e7, depth_m=2000.0,
+                             fracture_gradient_pa_m=17000.0, safety_factor=0.8),
+        rel=1e-15,
     )
     mine = headroom / independent_theis_delta_p(1.0, **AQUIFER)
     theirs = max_injection_rate_m3_s(
