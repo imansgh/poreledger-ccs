@@ -22,10 +22,13 @@ a request-body cap, and MAX_SAMPLES bounding CPU per request.
 
 from __future__ import annotations
 
+import math
 from contextlib import asynccontextmanager
 from typing import Any, AsyncIterator, Callable
 
 from fastapi import Body, FastAPI, Path, Query, Request
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -73,7 +76,9 @@ stratigraphic units or gross stratigraphic thickness.
 
 Error mapping: `400` for a rejected domain request (`ApiError`), `404` for an
 unknown well, `413` for an oversized body, `422` for a schema violation
-(unknown field, wrong type, out-of-range `samples`).
+(unknown field, wrong type, out-of-range `samples`, a non-finite number such as
+`NaN` or `Infinity`). Every error, including `422`, uses the envelope
+`{error, type, detail}`; on a `422`, `detail` is the list of field errors.
 
 Only built-in scenario names are accepted over HTTP; a filesystem path is not.
 """
@@ -141,11 +146,33 @@ def resolve_scenario_name(name: str) -> str:
 
 
 def _error_response(status: int, error: str, type_: str,
-                    detail: str | None = None) -> JSONResponse:
+                    detail: str | list[Any] | None = None) -> JSONResponse:
     return JSONResponse(
         status_code=status,
         content={"error": error, "type": type_, "detail": detail},
     )
+
+
+#: How a non-finite float is echoed back in an error, spelled as the JSON
+#: extension (Python's json module) that let it into the request.
+_NON_FINITE_NAMES = {"nan": "NaN", "inf": "Infinity", "-inf": "-Infinity"}
+
+
+def _json_safe(value: Any) -> Any:
+    """Make a validation-error echo encodable as strict JSON.
+
+    A rejected ``NaN`` or ``Infinity`` is echoed in the error's ``input``; the
+    response encoder refuses non-finite floats, which turned the 422 into a
+    plain-text 500. They are echoed as their names instead. This touches the
+    error report only -- the request was already rejected.
+    """
+    if isinstance(value, float) and not math.isfinite(value):
+        return _NON_FINITE_NAMES[repr(value)]
+    if isinstance(value, dict):
+        return {key: _json_safe(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(item) for item in value]
+    return value
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -198,6 +225,25 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.exception_handler(api.ApiError)
     def _api_error(request: Request, exc: api.ApiError) -> JSONResponse:
         return _error_response(400, str(exc), "ApiError")
+
+    @app.exception_handler(RequestValidationError)
+    def _validation_error(request: Request, exc: RequestValidationError) -> JSONResponse:
+        # Same envelope as every other error. ``detail`` stays the list of
+        # field errors (loc, msg, type, input) that FastAPI returns by default,
+        # so clients parsing it are unaffected.
+        errors = _json_safe(jsonable_encoder(exc.errors()))
+        first = errors[0] if errors else {}
+        where = ".".join(str(part) for part in first.get("loc", ()) if part != "body")
+        message = f"{where}: {first.get('msg')}" if where else str(first.get("msg", "invalid"))
+        return _error_response(422, f"request validation failed: {message}",
+                               "RequestValidationError", errors)
+
+    @app.exception_handler(Exception)
+    def _unexpected_error(request: Request, exc: Exception) -> JSONResponse:
+        # Never send a traceback or exception text to the client. Starlette
+        # re-raises the exception after this response, so the server still
+        # logs it; nothing is swallowed.
+        return _error_response(500, "internal server error", "InternalServerError")
 
     # -- endpoints -----------------------------------------------------------
     # All sync `def`: FastAPI runs them in a threadpool, keeping the event loop
@@ -287,13 +333,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/funnel", responses=_ERRORS, tags=["meta"])
     def funnel(
         scenario: str = Query(api.DEFAULT_SCENARIO, max_length=200),
-        samples: int = Query(200, ge=api.MIN_SAMPLES, le=api.MAX_SAMPLES),
+        samples: int = Query(
+            200, ge=api.MIN_SAMPLES, le=api.MAX_SAMPLES,
+            description=("Accepted and range-checked for backwards compatibility only. "
+                         "The funnel runs no Monte Carlo, so this has no effect."),
+        ),
     ) -> dict[str, Any]:
         """Fleet-level counts, with the states kept distinct.
 
         No user inputs. Under the approved model this reports depth-reference
         readiness (an approved result needs a per-well interval); under a
-        legacy scenario it is the NOT_VALIDATED completeness funnel.
+        legacy scenario it is the NOT_VALIDATED completeness funnel. No
+        capacity is computed on either path.
         """
         return api.screening_funnel(scenario=resolve_scenario_name(scenario),
                                     data_dir=config.data_dir, samples=samples)
