@@ -60,6 +60,7 @@ from ccs_screen.approved_model import (
     evaluate_approved_model,
     is_approved_parameter_set,
 )
+from ccs_screen.config import _bounds_message
 from ccs_screen.ingest.assumptions import (
     Assumption,
     AssumptionError,
@@ -795,6 +796,11 @@ class UserInputs:
                     f"{name}: must be > {spec['minimum_exclusive']:g} {spec['unit']}, "
                     f"got {number:g}"
                 )
+            elif (bound := _bounds_message(name, number)) is not None:
+                # The existing config.BOUNDS, checked here so an out-of-range
+                # value is refused as an input rather than surfacing later as
+                # an uncaught ConfigError when the screening config is built.
+                problems.append(bound)
         if self.net_to_gross is not None and not isinstance(self.net_to_gross, NetToGross):
             problems.append(f"net_to_gross: expected NetToGross or None, "
                             f"got {type(self.net_to_gross).__name__}")
@@ -1376,6 +1382,10 @@ def screening_funnel(scenario: str | ScreeningScenario = DEFAULT_SCENARIO,
     Under the approved model the funnel reports depth-reference readiness only:
     an approved result needs a per-well interval, so none is computed here.
     Under a legacy scenario it is the existing funnel, labelled NOT_VALIDATED.
+
+    No Monte Carlo is run on either path: the funnel reports counts, never a
+    capacity. ``samples`` and ``seed`` are still accepted, and ``samples`` still
+    validated, for backwards compatibility; neither affects the result.
     """
     from ccs_screen.ingest.report import build_funnel
 
@@ -1393,8 +1403,7 @@ def screening_funnel(scenario: str | ScreeningScenario = DEFAULT_SCENARIO,
         supplied = (user_inputs if isinstance(user_inputs, UserInputs)
                     else UserInputs.from_mapping(user_inputs))
         active = _with_user_inputs(base, supplied)
-    reports = [_screen_record(r, active, samples=samples, seed=seed) for r in records]
-    payload = build_funnel(list(records), active, reports).to_dict()
+    payload = build_funnel(list(records), active).to_dict()
     payload["model_path"] = LEGACY_MODEL_PATH
     payload["validation_status"] = NOT_VALIDATED
     payload["interpretation"] = _interpretation(active, not_validated=True)

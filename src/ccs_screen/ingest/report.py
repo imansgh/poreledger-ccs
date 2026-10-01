@@ -447,18 +447,30 @@ class ScreeningFunnel:
 
 def build_funnel(records: Sequence[NormalizedWellRecord], scenario: ScreeningScenario,
                  reports: Iterable[WellScreeningReport] | None = None) -> ScreeningFunnel:
-    """Count the fleet through each distinct completeness state."""
+    """Count the fleet through each distinct completeness state.
+
+    Without ``reports`` the counts come from :func:`apply_scenario` alone: the
+    funnel consumes only screenability and missing fields, never a capacity, so
+    no Monte Carlo is run to produce it.
+    """
     from ccs_screen.ingest.scenario import NO_SCENARIO
 
-    reports = list(reports) if reports is not None else [
-        screen_well(r, scenario, samples=1) for r in records
-    ]
+    if reports is not None:
+        reports = list(reports)
+        blocked = tuple(
+            (rep.canonical_id, rep.missing_fields) for rep in reports if not rep.screenable
+        )
+        screenable = sum(1 for rep in reports if rep.screenable)
+    else:
+        outcomes = [apply_scenario(r, scenario) for r in records]
+        blocked = tuple(
+            (o.canonical_id, o.missing_fields) for o in outcomes
+            if isinstance(o, IncompleteScreening)
+        )
+        screenable = len(outcomes) - len(blocked)
     source_complete = sum(
         1 for r in records
         if not resolve_inputs(r, NO_SCENARIO)[1]
-    )
-    blocked = tuple(
-        (rep.canonical_id, rep.missing_fields) for rep in reports if not rep.screenable
     )
     return ScreeningFunnel(
         normalized=len(records),
@@ -466,8 +478,8 @@ def build_funnel(records: Sequence[NormalizedWellRecord], scenario: ScreeningSce
         with_gross_thickness=sum(1 for r in records if r.gross_thickness_m.is_present),
         with_depth=sum(1 for r in records if r.depth_m.is_present),
         source_complete=source_complete,
-        scenario_complete=sum(1 for rep in reports if rep.screenable),
-        screenable=sum(1 for rep in reports if rep.screenable),
+        scenario_complete=screenable,
+        screenable=screenable,
         blocked=blocked,
         scenario_name=scenario.name,
         scenario_version=scenario.version,

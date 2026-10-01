@@ -106,7 +106,8 @@ inside the storage efficiency by construction.
 | 400 | `ApiError` -- a valid-shaped request the domain refuses (e.g. unknown scenario) |
 | 404 | `UnknownWellError` |
 | 413 | Request body over the configured cap |
-| 422 | Schema violation: unknown field, wrong type, out-of-range `samples` |
+| 422 | Schema violation: unknown field, wrong type, out-of-range `samples`, a non-finite number (`NaN`, `Infinity`, `-Infinity`) |
+| 500 | Unexpected server error; the body never carries a traceback |
 
 `UnknownWellError` subclasses `ApiError`, so its handler is registered first.
 
@@ -115,6 +116,17 @@ Errors share one envelope:
 ```json
 {"error": "no well with id 'NOPE|9'", "type": "UnknownWellError", "detail": null}
 ```
+
+On a `422` (`"type": "RequestValidationError"`), `detail` is the list of field
+errors (`loc`, `msg`, `type`, `input`); a rejected non-finite `input` is echoed
+as `"NaN"`, `"Infinity"` or `"-Infinity"`.
+
+On a legacy scenario, `area_m2` and `thickness_m` must also lie inside the
+existing screening-config bounds (`ccs_screen.config.BOUNDS`); a value outside
+them comes back `blocked` naming the bound.
+
+`GET /funnel` runs no Monte Carlo on either path. Its `samples` parameter is
+still accepted and range-checked for backwards compatibility, and has no effect.
 
 ## Limits
 

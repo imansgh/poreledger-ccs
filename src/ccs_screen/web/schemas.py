@@ -86,6 +86,7 @@ class UserInputsModel(BaseModel):
     area_m2: float = Field(
         ...,
         gt=0,
+        allow_inf_nan=False,
         description=("Structural closure area in m2. Never inferred from licence "
                      "boundaries, concession polygons, well spacing or a radius."),
         json_schema_extra={"example": 8.0e7},
@@ -111,6 +112,7 @@ class UserInputsModel(BaseModel):
     thickness_m: float | None = Field(
         default=None,
         gt=0,
+        allow_inf_nan=False,
         description=("NOT_VALIDATED legacy scenarios only: net storage thickness in "
                      "m -- not the gross chronostratigraphic interval. Rejected by "
                      "the approved model."),
