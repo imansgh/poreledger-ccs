@@ -103,8 +103,22 @@ def predict_samples(model: LinearSurrogate, samples: list[CapacitySample]) -> np
     return predict(model, design_matrix(samples))
 
 
+#: Relative tolerance within which a prediction of a constant response counts
+#: as exact: well above the ulp-level residue lstsq leaves when fitting a
+#: constant, far below any error that matters at screening scale.
+CONSTANT_TARGET_RTOL = 1e-9
+
+
 def evaluate(model: LinearSurrogate, samples: list[CapacitySample], masses_mt: np.ndarray) -> SurrogateMetrics:
-    """Goodness-of-fit of the surrogate against the physics it approximates."""
+    """Goodness-of-fit of the surrogate against the physics it approximates.
+
+    Constant-response convention. R2 = 1 - SS_res/SS_tot is undefined when the
+    response is constant (SS_tot = 0). Following the convention of
+    ``sklearn.metrics.r2_score`` (``force_finite=True``), R2 is then 1.0 when
+    every prediction matches the constant to within ``CONSTANT_TARGET_RTOL``
+    of its scale, and 0.0 otherwise -- an imperfect prediction never scores as
+    a perfect fit. RMSE and MAE carry the size of the error in either case.
+    """
     y = np.asarray(masses_mt, dtype=float)
     pred = predict_samples(model, samples)
     residual = pred - y
@@ -114,8 +128,13 @@ def evaluate(model: LinearSurrogate, samples: list[CapacitySample], masses_mt: n
     # constant response, y.mean() can differ from y by an ulp (numpy-version
     # dependent), leaving ss_tot as residue and r2 as noise. Test the exact
     # spread against the response's scale instead of ss_tot > 0.
-    constant = (y.max() - y.min()) <= 1e-12 * max(abs(float(y.mean())), 1.0)
-    r2 = 1.0 if constant or ss_tot <= 0 else 1.0 - ss_res / ss_tot
+    scale = max(abs(float(y.mean())), 1.0)
+    constant = (y.max() - y.min()) <= 1e-12 * scale
+    if constant or ss_tot <= 0:
+        exact = float(np.max(np.abs(residual))) <= CONSTANT_TARGET_RTOL * scale
+        r2 = 1.0 if exact else 0.0
+    else:
+        r2 = 1.0 - ss_res / ss_tot
     return SurrogateMetrics(
         rmse_mt=float(np.sqrt(np.mean(residual**2))),
         mae_mt=float(np.mean(np.abs(residual))),

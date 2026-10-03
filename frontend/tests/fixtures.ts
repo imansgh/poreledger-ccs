@@ -13,6 +13,8 @@
 
 import type {
   ApprovedScreenResult,
+  DatasetInfo,
+  HealthInfo,
   Interpretation,
   LegacyScreenResult,
   RequiredInputs,
@@ -751,3 +753,30 @@ export const approvedBlocked: ApprovedScreenResult = {
   error:
     "thickness_m is not an input of the approved model: its thickness term is h_g = z_base - z_top.",
 };
+
+/** /health for the real structured sources. */
+export const realDataset: DatasetInfo = {
+  kind: "structured_sources",
+  synthetic: false,
+  name: "Structured well sources (GEOTHOPICA workbook and registry CSVs)",
+  version: null,
+  statement: null,
+};
+
+/** /health for the bundled synthetic demo dataset. */
+export const demoDataset: DatasetInfo = {
+  kind: "synthetic_demo",
+  synthetic: true,
+  name: "CCS screening synthetic demonstration dataset",
+  version: "1",
+  statement: "Every well, name, depth, datum, elevation and temperature in this file is fictional.",
+};
+
+export const realHealth: HealthInfo = {
+  status: "ok",
+  data_ready: true,
+  dataset: realDataset,
+  wells_loaded: 2,
+};
+
+export const demoHealth: HealthInfo = { ...realHealth, dataset: demoDataset, wells_loaded: 4 };

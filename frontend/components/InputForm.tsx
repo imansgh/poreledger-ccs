@@ -45,7 +45,9 @@ type Errors = Record<string, string>;
  * The inputs the backend refuses to invent, as the selected scenario requires
  * them (the API's required-inputs list decides which fields appear).
  *
- * Every field starts empty. A default here would be a hidden geological
+ * Every field starts empty, and starts empty again for each well: the
+ * workspace keys this form by well id, so values typed for one well are never
+ * submitted for another. A default here would be a hidden geological
  * assumption wearing the clothes of a result, which is exactly what the
  * backend contract exists to prevent. The form checks only that each value is
  * a usable number; it computes nothing from them.

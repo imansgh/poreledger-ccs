@@ -1,0 +1,6 @@
+{
+  "user_inputs": {"area_m2": 20000000, "z_top": 1450, "z_base": 1550},
+  "scenario": "literature-screening-v1",
+  "samples": 2000,
+  "seed": 42
+}

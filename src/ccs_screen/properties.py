@@ -66,18 +66,26 @@ VALIDATED_ENVELOPE_TEMPERATURE_K = (280.0, 400.0)
 SQRT2 = math.sqrt(2.0)
 
 
-def co2_density_kg_m3(pressure_pa: float, temperature_k: float) -> float:
-    """Dense-phase CO2 density rho(P, T) in kg/m3."""
+def _require_state(pressure_pa: float, temperature_k: float) -> None:
+    # ``<= 0`` alone lets NaN through to the cubic solver.
+    if not (math.isfinite(pressure_pa) and math.isfinite(temperature_k)):
+        raise ValueError(
+            f"pressure and temperature must be finite, got {pressure_pa!r} Pa, {temperature_k!r} K"
+        )
     if pressure_pa <= 0 or temperature_k <= 0:
         raise ValueError("pressure and temperature must be positive")
+
+
+def co2_density_kg_m3(pressure_pa: float, temperature_k: float) -> float:
+    """Dense-phase CO2 density rho(P, T) in kg/m3."""
+    _require_state(pressure_pa, temperature_k)
     molar_volume = co2_molar_volume_m3_mol(pressure_pa, temperature_k)
     return CO2_MW_KG_MOL / molar_volume
 
 
 def co2_molar_volume_m3_mol(pressure_pa: float, temperature_k: float) -> float:
     """Volume-translated molar volume in m3/mol."""
-    if pressure_pa <= 0 or temperature_k <= 0:
-        raise ValueError("pressure and temperature must be positive")
+    _require_state(pressure_pa, temperature_k)
     z = co2_compressibility(pressure_pa, temperature_k)
     v_eos = z * CO2_R_J_MOL_K * temperature_k / pressure_pa
     v = v_eos - peneloux_shift_m3_mol()
@@ -88,8 +96,7 @@ def co2_molar_volume_m3_mol(pressure_pa: float, temperature_k: float) -> float:
 
 def co2_compressibility(pressure_pa: float, temperature_k: float) -> float:
     """Untranslated Peng-Robinson Z-factor of the thermodynamically stable phase."""
-    if pressure_pa <= 0 or temperature_k <= 0:
-        raise ValueError("pressure and temperature must be positive")
+    _require_state(pressure_pa, temperature_k)
     return _peng_robinson_z(pressure_pa, temperature_k)
 
 

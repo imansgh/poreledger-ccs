@@ -17,6 +17,8 @@ Design rules, all of them consequences of the reconnaissance:
 
 from __future__ import annotations
 
+import logging
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -43,6 +45,7 @@ from ccs_screen.ingest.sources import (
     PO_WELLS_FILE,
     POZZI_STORICI_FILE,
     SourceNotFoundError,
+    SourceReadError,
     SourceTable,
     StructuredSources,
     classify_temperature_method,
@@ -68,6 +71,42 @@ DEPTH_CONFLICT_TOLERANCE_M = 1.0
 #: ``ccs_screen.approved_model`` and never reads ``record.temperature_k``.
 RESERVOIR_DEPTH_FRACTION = 0.85
 
+_log = logging.getLogger(__name__)
+
+#: Source load outcomes reported by :attr:`WellNormalizer.source_status`.
+SOURCE_LOADED = "loaded"
+SOURCE_MISSING = "missing"
+SOURCE_DEPENDENCY_MISSING = "dependency_missing"
+#: Present but unreadable: inaccessible, corrupt, or malformed (SourceReadError).
+SOURCE_UNREADABLE = "unreadable"
+#: The synthetic demo manifest shares a directory with real source files.
+SOURCE_CONFLICT = "conflict"
+
+
+@dataclass(frozen=True)
+class SourceStatus:
+    """How one structured source fared in :meth:`WellNormalizer.run`.
+
+    ``required`` sources are the GEOTHOPICA workbook sheets: Anagrafica is the
+    only source that defines wells, and the temperature and stratigraphy sheets
+    carry the per-well inputs. The two registry CSVs only enrich wells the
+    workbook already defines, and stay optional by design.
+    """
+
+    source: str
+    file: str
+    required: bool
+    status: str
+    detail: str | None = None
+
+    @property
+    def ok(self) -> bool:
+        return self.status == SOURCE_LOADED
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"source": self.source, "file": self.file, "required": self.required,
+                "status": self.status, "detail": self.detail}
+
 
 def _num(value: Any, field_name: str) -> tuple[float | None, str | None]:
     """Parse, returning (value, problem). Never raises."""
@@ -87,6 +126,7 @@ class WellNormalizer:
         self._raw: list[RawWellRecord] = []
         self._wells: dict[str, NormalizedWellRecord] = {}
         self._used_sources: set[str] = set()
+        self._source_status: list[SourceStatus] = []
 
     # -- record plumbing ---------------------------------------------------
 
@@ -332,6 +372,15 @@ class WellNormalizer:
 
     # -- derivation --------------------------------------------------------
 
+    def derive(self, rec: NormalizedWellRecord) -> None:
+        """Run the derivation step on a record built elsewhere.
+
+        Used by the synthetic demo loader so demo records get exactly the same
+        derived fields (gross thickness, legacy temperature, sub-sea depth) as
+        records normalized from the real sources.
+        """
+        self._derive(rec)
+
     def _derive(self, rec: NormalizedWellRecord) -> None:
         self._derive_gross_thickness(rec)
         self._derive_temperature(rec)
@@ -437,19 +486,41 @@ class WellNormalizer:
     # -- entry point -------------------------------------------------------
 
     def run(self) -> list[NormalizedWellRecord]:
-        """Load every available source, then derive. Missing files are skipped."""
+        """Load every available source, then derive.
+
+        A missing source file, sheet or reader dependency (openpyxl), or a
+        present but unreadable source (``SourceReadError``: inaccessible,
+        corrupt or malformed), does not stop the run, but it is not silent: every outcome is recorded in
+        :attr:`source_status`, and a failed *required* source is logged as a
+        warning. Callers decide whether a partial dataset is acceptable; see
+        :attr:`missing_required_sources`.
+        """
         loaders = (
-            self.load_geothopica_anagrafica,
-            self.load_geothopica_temperatures,
-            self.load_geothopica_stratigraphy,
-            self.load_pozzi_storici,
-            self.load_po_wells,
+            ("GEOTHOPICA:Anagrafica", GEOTHOPICA_FILE, True, self.load_geothopica_anagrafica),
+            ("GEOTHOPICA:Temperature", GEOTHOPICA_FILE, True, self.load_geothopica_temperatures),
+            ("GEOTHOPICA:Lito-Stratigrafie", GEOTHOPICA_FILE, True,
+             self.load_geothopica_stratigraphy),
+            ("pozzi-storici", POZZI_STORICI_FILE, False, self.load_pozzi_storici),
+            ("po_wells", PO_WELLS_FILE, False, self.load_po_wells),
         )
-        for loader in loaders:
+        self._source_status = []
+        for source, file, required, loader in loaders:
             try:
                 loader()
-            except (SourceNotFoundError, ImportError):
-                continue
+            except SourceNotFoundError as exc:
+                outcome = SourceStatus(source, file, required, SOURCE_MISSING, str(exc))
+            except ImportError as exc:
+                outcome = SourceStatus(source, file, required, SOURCE_DEPENDENCY_MISSING, str(exc))
+            except SourceReadError as exc:
+                outcome = SourceStatus(source, file, required, SOURCE_UNREADABLE, str(exc))
+            else:
+                outcome = SourceStatus(source, file, required, SOURCE_LOADED)
+            self._source_status.append(outcome)
+            if not outcome.ok:
+                level = logging.WARNING if required else logging.INFO
+                _log.log(level, "%s source %s not loaded (%s): %s",
+                         "required" if required else "optional", source,
+                         outcome.status, outcome.detail)
         for rec in self._wells.values():
             self._derive(rec)
         return sorted(self._wells.values(), key=lambda r: r.canonical_id)
@@ -461,3 +532,13 @@ class WellNormalizer:
     @property
     def used_sources(self) -> tuple[str, ...]:
         return tuple(sorted(self._used_sources))
+
+    @property
+    def source_status(self) -> tuple[SourceStatus, ...]:
+        """Per-source outcome of the last :meth:`run`, in load order."""
+        return tuple(self._source_status)
+
+    @property
+    def missing_required_sources(self) -> tuple[SourceStatus, ...]:
+        """Required sources the last :meth:`run` could not load."""
+        return tuple(s for s in self._source_status if s.required and not s.ok)

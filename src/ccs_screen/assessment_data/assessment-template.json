@@ -1,0 +1,18 @@
+{
+  "schema_version": "ccs-assessment/1",
+  "assessments": [
+    {
+      "id": "MY-SITE-1",
+      "name": "",
+      "storage_area": {"value": null, "unit": "km2", "source": ""},
+      "storage_interval": {"top": null, "base": null, "unit": "m", "source": ""},
+      "depth_reference": {"datum": "", "convention": "", "source": ""},
+      "surface_elevation": {"value": null, "unit": "m", "reference": "msl", "source": ""},
+      "total_depth": {"value": null, "unit": "m", "source": ""},
+      "temperature_observations": [
+        {"value": null, "unit": "degC", "depth": null, "depth_unit": "m", "depth_datum": "", "depth_convention": "", "method": "", "source": ""}
+      ],
+      "notes": ""
+    }
+  ]
+}

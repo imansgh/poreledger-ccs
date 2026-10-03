@@ -125,11 +125,18 @@ def main(argv: list[str] | None = None) -> int:
         scenario = resolve_scenario(args)
         normalizer = WellNormalizer(data_dir)
         records = normalizer.run()
+        missing_required = [f"{s.source} {s.status}: {s.detail}"
+                            for s in normalizer.missing_required_sources]
         if not records:
             raise ValueError(
                 f"no wells normalized from {data_dir}; available sources: "
                 f"{normalizer.sources.available}"
+                + (f"; required sources not loaded: {'; '.join(missing_required)}"
+                   if missing_required else "")
             )
+        for problem in missing_required:
+            print(f"ccs-ingest: warning: required source not loaded: {problem}", file=sys.stderr)
+        payload["source_status"] = [s.to_dict() for s in normalizer.source_status]
         by_id = {r.canonical_id: r for r in records}
         if args.well and args.well not in by_id:
             raise ValueError(f"no well with canonical id {args.well!r}")

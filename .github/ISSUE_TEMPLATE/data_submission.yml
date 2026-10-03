@@ -1,0 +1,53 @@
+name: Data submission
+description: Offer real well data (depth datums, temperatures, storage-interval evidence, ...).
+labels: ["data"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please read `docs/data-contribution.md` in the repository first.
+
+        **Do not attach data you are not allowed to redistribute publicly.** Every submission is
+        reviewed. Accepted data is applied with the model unchanged, and **a well may remain
+        scientifically `UNAVAILABLE`** if the model's requirements are still not met.
+  - type: textarea
+    id: wells
+    attributes:
+      label: Wells
+      description: Names exactly as printed in the source, alternate names or codes, sidetracks.
+    validations:
+      required: true
+  - type: textarea
+    id: source
+    attributes:
+      label: Source and attribution
+      description: Publisher, title, edition or date, where it can be obtained, page or table references.
+    validations:
+      required: true
+  - type: textarea
+    id: rights
+    attributes:
+      label: Redistribution rights
+      description: The license or permission under which this data may be published in a public repository. Write "unknown" if you do not know.
+    validations:
+      required: true
+  - type: checkboxes
+    id: contents
+    attributes:
+      label: What the submission documents
+      options:
+        - label: Depth datum for every depth (ground level, rotary table, kelly bushing, sea level, or "unknown"), with where it is stated
+        - label: Whether depths are MD or TVD (deviation survey or printed TVD for deviated wells)
+        - label: Units exactly as printed, without conversion
+        - label: Temperature method and measurement depth for every temperature
+        - label: Evidence for a storage-assessment interval (if any)
+        - label: Unknown values left empty and marked unknown, not estimated
+  - type: textarea
+    id: data
+    attributes:
+      label: Data or a description of it
+      description: A table (see the suggested columns in the guide), a link, or a description. Only what you may share publicly.
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes and caveats

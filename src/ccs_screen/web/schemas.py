@@ -160,12 +160,79 @@ class TemperatureRequest(BaseModel):
 # -- responses ---------------------------------------------------------------
 
 
+class DatasetModel(BaseModel):
+    """Which dataset the service reads. ``synthetic`` is true for the demo."""
+
+    kind: Literal["structured_sources", "synthetic_demo", "none"]
+    synthetic: bool
+    name: str
+    version: str | None = None
+    statement: str | None = None
+
+
 class HealthResponse(BaseModel):
+    """Liveness. ``status`` is ``ok`` whenever the process is serving.
+
+    ``engine_ready``: user assessments can be evaluated (detail at ``/ready``).
+    ``data_ready``: the optional existing well dataset is usable (detail at
+    ``/ready/existing-data``)."""
+
     status: Literal["ok"]
+    engine_ready: bool
+    data_ready: bool
+    dataset: DatasetModel
     wells_loaded: int
     data_dir: str
     scenario_default: str
     limits: dict[str, Any]
+
+
+class SourceStatusModel(BaseModel):
+    source: str
+    file: str
+    required: bool
+    status: Literal["loaded", "missing", "dependency_missing", "unreadable", "conflict"]
+    detail: str | None
+
+
+class EngineReadinessResponse(BaseModel):
+    """Engine readiness (``/ready``): 200 when user assessments can be evaluated.
+
+    ``existing_data`` reports the optional well dataset for information only;
+    it never makes the service unready."""
+
+    status: Literal["ready", "not_ready"]
+    engine: dict[str, Any]
+    existing_data: dict[str, Any]
+
+
+class AssessmentParseRequest(BaseModel):
+    """An uploaded file's text. It is parsed as data, never executed."""
+
+    model_config = _STRICT
+    format: Literal["json", "csv"]
+    content: str = Field(..., max_length=200_000)
+    filename: str | None = Field(default=None, max_length=255)
+
+
+class AssessmentRequest(BaseModel):
+    """A ``ccs-assessment/1`` document plus run controls."""
+
+    model_config = _STRICT
+    document: dict[str, Any]
+    samples: StrictInt = Field(default=2000, ge=1, le=50_000)
+    seed: StrictInt = Field(default=42, ge=0, le=2**32 - 1)
+
+
+class ReadinessResponse(BaseModel):
+    """Existing-data readiness: 200 with ``ready``, otherwise 503 with ``not_ready``."""
+
+    status: Literal["ready", "not_ready"]
+    dataset: DatasetModel
+    wells_loaded: int
+    data_dir: str
+    sources: list[SourceStatusModel]
+    problems: list[str]
 
 
 class InterpretationModel(BaseModel):
@@ -317,8 +384,12 @@ class TemperatureResponse(BaseModel):
 
 
 class ErrorResponse(BaseModel):
-    """Uniform error envelope for 400/404/413."""
+    """Uniform error envelope for 400/404/413/503.
+
+    ``detail`` is a string, ``null``, or a list: the field errors of a 422, or
+    the failed required sources of a 503 ``DatasetNotReadyError``.
+    """
 
     error: str
     type: str
-    detail: str | None = None
+    detail: str | list[Any] | None = None

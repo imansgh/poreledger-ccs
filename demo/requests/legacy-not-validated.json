@@ -1,0 +1,6 @@
+{
+  "user_inputs": {"area_m2": 20000000, "thickness_m": 30},
+  "scenario": "sensitivity",
+  "samples": 2000,
+  "seed": 42
+}

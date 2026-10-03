@@ -167,3 +167,31 @@ def test_density_is_finite_and_positive_across_the_grid():
     for pressure_pa, temperature_k, _ in BENCHMARK:
         rho = co2_density_kg_m3(pressure_pa, temperature_k)
         assert math.isfinite(rho) and rho > 0
+
+
+def test_error_over_the_whole_validated_envelope_against_span_wagner():
+    """Live comparison with CoolProp (Span & Wagner 1996) on a 35 x 25 grid
+    covering the approved validated envelope, 1-35 MPa x 280-400 K.
+
+    Recorded with CoolProp 8.0.0 (docs/validation-evidence.md): mean |error|
+    3.80%, median 2.54%, 95th percentile 11.23%, max 13.58% at 35 MPa / 280 K.
+    These bound the EOS component only, inside the envelope; they say nothing
+    about the accuracy of a storage estimate. Runs in the CI reference-checks
+    job with CCS_REQUIRE_REFERENCE_TESTS=1, so it cannot be skipped there.
+    """
+    from conftest import coolprop_propssi
+
+    PropsSI = coolprop_propssi()
+    errors = []
+    for i in range(35):
+        pressure = 1e6 + i * (34e6 / 34)
+        for j in range(25):
+            temperature = 280.0 + j * 5.0
+            reference = PropsSI("D", "P", pressure, "T", temperature, "CO2")
+            errors.append(abs(percent_error(pressure, temperature, reference)))
+    errors.sort()
+    mean = sum(errors) / len(errors)
+    assert len(errors) == 875
+    assert max(errors) < 14.0, f"max |error| {max(errors):.2f}%"
+    assert mean < 4.0, f"mean |error| {mean:.2f}%"
+    assert errors[int(0.95 * len(errors))] < 12.0

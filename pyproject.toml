@@ -3,12 +3,27 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
+# Distribution and import names (ccs-screen / ccs_screen) predate the
+# PoreLedger CCS name and are kept so existing installs and imports work.
 name = "ccs-screen"
 version = "0.2.0"
-description = "Screening-grade tools for geologic CO2 storage: capacity, pressure, and uncertainty."
+description = "PoreLedger CCS: conditional CO2 storage screening and uncertainty analysis with explicit inputs and reproducible results."
 readme = "README.md"
 requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [{name = "Iman Saghafifar"}]
+keywords = ["CO2 storage", "CCS", "screening", "Monte Carlo", "uncertainty"]
+classifiers = [
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering",
+]
 dependencies = ["numpy>=2.0", "scipy>=1.11"]
+
+[project.urls]
+Homepage = "https://imansgh.me"
+Repository = "https://github.com/imansgh/poreledger-ccs"
 
 [project.optional-dependencies]
 # Reading the GEOTHOPICA workbook is the only thing that needs openpyxl, so the
@@ -31,6 +46,10 @@ ccs-ingest = "ccs_screen.ingest.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+# Synthetic examples and input templates served by the assessment API.
+[tool.setuptools.package-data]
+ccs_screen = ["assessment_data/*.json", "assessment_data/*.csv"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]

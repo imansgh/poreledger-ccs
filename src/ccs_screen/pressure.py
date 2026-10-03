@@ -12,19 +12,50 @@ bounded-aquifer solution is approved. The functions below are arithmetic only:
 they take every criterion as an explicit argument and supply none. The former
 defaults (15,000 Pa/m and a 0.9 safety factor) had no documented source and
 have been removed; they are not retained as approved values.
+
+Numerical domain. Every input must be a finite real number (``value <= 0``
+alone lets ``NaN`` through). An intermediate that overflows or underflows
+floating-point arithmetic raises :class:`TheisDomainError` instead of
+propagating ``inf``, ``NaN`` or a division by zero. In particular, for large
+``u`` the well function ``E1(u)`` underflows to exactly zero (``u`` above about
+700): the unit-rate pressure response is then below floating-point resolution,
+``theis_injection_delta_p_pa`` returns 0.0, and ``max_injection_rate_m3_s``
+raises rather than invent a finite limit, because the Theis model sets no
+resolvable rate limit at that radius and time.
 """
 
 from __future__ import annotations
 
 import math
+from numbers import Real
 
 from scipy.special import exp1
 
 
+class TheisDomainError(ValueError):
+    """The Theis calculation left floating-point range for these inputs.
+
+    A :class:`ValueError`, so the CLI's existing error path stays controlled.
+    """
+
+
 def _require_positive(**values: float) -> None:
     for name, value in values.items():
+        if isinstance(value, bool) or not isinstance(value, Real):
+            raise TypeError(f"{name} must be a real number, got {type(value).__name__}")
+        if not math.isfinite(value):
+            raise ValueError(f"{name} must be finite, got {value!r}")
         if value <= 0:
             raise ValueError(f"{name} must be positive")
+
+
+def _require_finite_positive_result(name: str, value: float) -> float:
+    if not math.isfinite(value) or value <= 0:
+        raise TheisDomainError(
+            f"{name} is not a finite positive number ({value!r}): the inputs overflow "
+            "or underflow floating-point arithmetic"
+        )
+    return value
 
 
 def theis_transmissivity(permeability_m2: float, thickness_m: float, viscosity_pa_s: float) -> float:
@@ -32,7 +63,9 @@ def theis_transmissivity(permeability_m2: float, thickness_m: float, viscosity_p
     _require_positive(
         permeability_m2=permeability_m2, thickness_m=thickness_m, viscosity_pa_s=viscosity_pa_s
     )
-    return permeability_m2 * thickness_m / viscosity_pa_s
+    return _require_finite_positive_result(
+        "transmissivity", permeability_m2 * thickness_m / viscosity_pa_s
+    )
 
 
 def theis_injection_delta_p_pa(
@@ -45,7 +78,11 @@ def theis_injection_delta_p_pa(
     porosity: float,
     compressibility_1_pa: float,
 ) -> float:
-    """Pressure rise at ``radius_m`` after ``time_s`` of constant-rate injection."""
+    """Pressure rise at ``radius_m`` after ``time_s`` of constant-rate injection.
+
+    Returns 0.0 when ``E1(u)`` underflows: the response is positive but below
+    floating-point resolution.
+    """
     _require_positive(
         rate_m3_s=rate_m3_s,
         permeability_m2=permeability_m2,
@@ -57,11 +94,16 @@ def theis_injection_delta_p_pa(
         compressibility_1_pa=compressibility_1_pa,
     )
     transmissivity = theis_transmissivity(permeability_m2, thickness_m, viscosity_pa_s)
-    storativity = porosity * compressibility_1_pa * thickness_m
-    u = (radius_m**2 * storativity) / (4 * transmissivity * time_s)
-    if u <= 0:
-        raise ValueError("Theis u must be positive")
-    return (rate_m3_s / (4 * math.pi * transmissivity)) * float(exp1(u))
+    storativity = _require_finite_positive_result(
+        "storativity", porosity * compressibility_1_pa * thickness_m
+    )
+    u = _require_finite_positive_result(
+        "Theis u", (radius_m**2 * storativity) / (4 * transmissivity * time_s)
+    )
+    delta_p = (rate_m3_s / (4 * math.pi * transmissivity)) * float(exp1(u))
+    if not math.isfinite(delta_p):
+        raise TheisDomainError(f"Theis pressure rise overflows floating-point range ({delta_p!r})")
+    return delta_p
 
 
 def max_injection_rate_m3_s(
@@ -77,6 +119,10 @@ def max_injection_rate_m3_s(
     """Largest constant rate whose Dp at ``radius_m`` stays within the allowance.
 
     Theis Dp is proportional to rate, so the inversion is a single division.
+
+    Raises :class:`TheisDomainError` when the unit-rate response underflows to
+    zero (``E1(u)`` below floating-point resolution). The model then sets no
+    resolvable limit at this radius and time; no finite rate is substituted.
     """
     _require_positive(allowable_delta_p_pa=allowable_delta_p_pa)
     unit_dp = theis_injection_delta_p_pa(
@@ -89,7 +135,18 @@ def max_injection_rate_m3_s(
         porosity=porosity,
         compressibility_1_pa=compressibility_1_pa,
     )
-    return allowable_delta_p_pa / unit_dp
+    if unit_dp == 0.0:
+        raise TheisDomainError(
+            "Theis unit-rate pressure response underflows to zero at this radius and "
+            "time (E1(u) below floating-point resolution), so no finite injection-rate "
+            "limit can be derived from the pressure allowance"
+        )
+    rate = allowable_delta_p_pa / unit_dp
+    if not math.isfinite(rate):
+        raise TheisDomainError(
+            f"maximum injection rate overflows floating-point range ({rate!r})"
+        )
+    return rate
 
 
 def fracture_pressure_pa(depth_m: float, fracture_gradient_pa_m: float) -> float:
@@ -98,7 +155,7 @@ def fracture_pressure_pa(depth_m: float, fracture_gradient_pa_m: float) -> float
     The gradient is required: no fracture gradient is approved (D1, D2).
     """
     _require_positive(depth_m=depth_m, fracture_gradient_pa_m=fracture_gradient_pa_m)
-    return depth_m * fracture_gradient_pa_m
+    return _require_finite_positive_result("fracture pressure", depth_m * fracture_gradient_pa_m)
 
 
 def allowable_delta_p_pa(

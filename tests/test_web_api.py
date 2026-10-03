@@ -645,8 +645,8 @@ def test_endpoints_are_sync_so_they_run_in_the_threadpool():
         "examples/literature-screening-v1.json",
         "/etc/passwd",
         "../pyproject.toml",
-        "..\pyproject.toml",
-        "C:\Windows\win.ini",
+        r"..\pyproject.toml",
+        r"C:\Windows\win.ini",
         "./README.md",
     ],
 )
@@ -702,7 +702,7 @@ def test_well_id_is_never_a_filesystem_path(client):
     probe returns content.
     """
     for probe in ("../../../etc/passwd", "..%2F..%2Fpyproject.toml", "./README.md",
-                  "C:\Windows\win.ini"):
+                  r"C:\Windows\win.ini"):
         response = client.get(f"/wells/{probe}")
         assert response.status_code == 404, probe
         body = response.json()

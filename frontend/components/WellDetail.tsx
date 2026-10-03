@@ -30,6 +30,15 @@ export function WellDetail({
         <dt>Well ID</dt>
         <dd>{detail.canonical_id}</dd>
 
+        {detail.dataset?.synthetic ? (
+          <>
+            <dt>Dataset</dt>
+            <dd>
+              <span className="tag tag-synthetic">SYNTHETIC</span> fictional demo well
+            </dd>
+          </>
+        ) : null}
+
         <dt>Also known as</dt>
         <dd>
           <Value>{detail.original_names?.join(", ")}</Value>

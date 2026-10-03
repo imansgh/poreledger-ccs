@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "CCS screening",
+  title: "PoreLedger CCS | CO₂ Storage Screening",
   description:
-    "Scenario-based CO2 storage screening with a full provenance audit trail.",
+    "Research software for conditional geological CO₂ storage screening, with explicit inputs, Monte Carlo uncertainty and reproducible results.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

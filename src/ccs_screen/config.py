@@ -93,6 +93,13 @@ RANGE_FIELDS = REQUIRED_FIELDS
 #: its outputs are NOT_VALIDATED.
 UNSET_BY_DEFAULT_FIELDS = ("fracture_gradient_pa_m", "safety_factor")
 
+#: Run controls that must be whole numbers. A fractional value is rejected
+#: rather than truncated: ``samples: 2.9`` silently becoming 2 would change the
+#: run the caller asked for. An integral float (``2000.0``, or ``1e3`` as JSON
+#: spells it) is the same integer and is accepted. ``seed`` must be >= 0, which
+#: is what ``numpy.random.default_rng`` accepts.
+INTEGER_FIELDS = ("samples", "seed")
+
 
 @dataclass(frozen=True)
 class ScreeningConfig:
@@ -143,7 +150,14 @@ class ScreeningConfig:
         for name in RANGE_FIELDS:
             problems += _check_range(name, getattr(self, name))
         for spec in fields(self):
-            if spec.name in RANGE_FIELDS or spec.name in ("well_id", "seed"):
+            if spec.name in RANGE_FIELDS or spec.name == "well_id":
+                continue
+            if spec.name in INTEGER_FIELDS:
+                number, errors = _check_integer(spec.name, getattr(self, spec.name))
+                problems += errors
+                if not errors:
+                    # Normalize an integral float (2000.0) to the int it denotes.
+                    object.__setattr__(self, spec.name, number)
                 continue
             if spec.name in UNSET_BY_DEFAULT_FIELDS and getattr(self, spec.name) is None:
                 continue
@@ -184,6 +198,13 @@ class ScreeningConfig:
                 continue
             if name in UNSET_BY_DEFAULT_FIELDS and value is None:
                 kwargs[name] = None
+                continue
+            if name in INTEGER_FIELDS:
+                parsed, errors = _check_integer(name, value)
+                if errors:
+                    problems += errors
+                else:
+                    kwargs[name] = parsed
                 continue
             if name in RANGE_FIELDS:
                 parsed, err = _coerce_range(name, value)
@@ -251,13 +272,27 @@ def _coerce_number(name: str, value: Any) -> tuple[float | None, str | None]:
     return number, None
 
 
-def _coerce_scalar(name: str, value: Any) -> tuple[float | int | None, str | None]:
+def _coerce_scalar(name: str, value: Any) -> tuple[float | None, str | None]:
+    return _coerce_number(name, value)
+
+
+def _check_integer(name: str, value: Any) -> tuple[int | None, list[str]]:
+    """Validate a whole-number run control; never truncates.
+
+    Returns the value as an ``int`` and no problems, or ``None`` and the
+    problems. ``samples`` is also bound-checked against ``BOUNDS``.
+    """
     number, err = _coerce_number(name, value)
     if err:
-        return None, err
-    if name in ("samples", "seed"):
-        return int(number), None
-    return number, None
+        return None, [err]
+    if not number.is_integer():
+        return None, [f"{name}: must be a whole number, got {value!r}"]
+    # int(value) for an int keeps full precision beyond 2**53.
+    integer = value if isinstance(value, int) else int(number)
+    if name == "seed" and integer < 0:
+        return None, [f"seed: must be >= 0, got {integer}"]
+    message = _bounds_message(name, number)
+    return (None, [message]) if message else (integer, [])
 
 
 def _coerce_range(name: str, value: Any) -> tuple[Range | None, str | None]:

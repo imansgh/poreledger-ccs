@@ -22,6 +22,7 @@ from typing import Any
 from ccs_screen.config import UNSET_BY_DEFAULT_FIELDS, ScreeningConfig
 from ccs_screen.monte_carlo import DEPLETED_GAS_ANALOG, McResult, UniformPriors, run_capacity_mc
 from ccs_screen.pressure import (
+    TheisDomainError,
     allowable_delta_p_pa,
     fracture_pressure_pa,
     max_injection_rate_m3_s,
@@ -262,8 +263,16 @@ def _injectivity(args: argparse.Namespace, priors: UniformPriors,
             safety_factor=factor,
         )
         values["allowable_delta_p_pa"] = headroom
-        values["max_rate_m3_s"] = (max_injection_rate_m3_s(allowable_delta_p_pa=headroom, **aquifer)
-                                   if headroom > 0 else 0.0)
+        if headroom > 0:
+            try:
+                values["max_rate_m3_s"] = max_injection_rate_m3_s(
+                    allowable_delta_p_pa=headroom, **aquifer)
+            except TheisDomainError as exc:
+                # No finite limit is resolvable here; report that, never a number.
+                status["max_rate_m3_s"] = UNAVAILABLE
+                reasons["max_rate_m3_s"] = str(exc)
+        else:
+            values["max_rate_m3_s"] = 0.0
         values["within_limit"] = bool(planned_dp <= headroom)
     else:
         reason = "; ".join(_MISSING_INPUT_REASON[name] for name in UNSET_SCALARS
@@ -376,6 +385,8 @@ def _render(report: dict[str, Any]) -> str:
     if missing:
         lines.append(f"  UNAVAILABLE because        : {missing[0]}")
         lines += [f"                               {reason}" for reason in missing[1:]]
+    elif max_rate is None and "max_rate_m3_s" in inj["unavailable_reasons"]:
+        lines.append(f"  max rate UNAVAILABLE       : {inj['unavailable_reasons']['max_rate_m3_s']}")
     return "\n".join(lines)
 
 

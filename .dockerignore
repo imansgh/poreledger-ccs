@@ -1,0 +1,19 @@
+# Never send local datasets, environments or build output to a Docker build.
+data/
+**/.env
+**/.env.local
+.git/
+.venv/
+**/__pycache__/
+**/*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+build/
+dist/
+*.egg-info/
+frontend/node_modules/
+frontend/.next/
+frontend/tsconfig.tsbuildinfo
+docs/
+tests/

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { DemoBanner, SyntheticResultNotice } from "./DemoBanner";
 import { InputForm } from "./InputForm";
 import { Notice } from "./Notice";
 import { ApprovedInputsPanel, ProvenancePanel } from "./ProvenancePanel";
@@ -15,6 +16,7 @@ import {
   ApiClientError,
   USING_DEV_FALLBACK_URL,
   compareTemperatureMethods,
+  getHealth,
   getRequiredInputs,
   getWell,
   listScenarios,
@@ -22,6 +24,7 @@ import {
   screenWell,
 } from "@/lib/api";
 import type {
+  DatasetInfo,
   RequiredInputs,
   ScenarioSummary,
   ScreenResult,
@@ -51,9 +54,10 @@ function messageFor(error: unknown): string {
  * State is deliberately flat. A previous result is cleared the moment the
  * selected well changes, so a number can never be read against the wrong well.
  */
-export function ScreeningWorkspace() {
+export function ScreeningWorkspace({ intro = null }: { intro?: React.ReactNode } = {}) {
   const [wells, setWells] = useState<WellSummary[]>([]);
   const [scenarios, setScenarios] = useState<ScenarioSummary[]>([]);
+  const [dataset, setDataset] = useState<DatasetInfo | null>(null);
   const [scenario, setScenario] = useState(DEFAULT_SCENARIO);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<WellDetailType | null>(null);
@@ -63,18 +67,29 @@ export function ScreeningWorkspace() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // Bumped whenever the well or scenario changes. A response is applied only
-  // if the generation it started under is still current, so a slow reply for
-  // a previous selection can never land beside the new one.
+  // Bumped whenever the well or scenario changes. Required inputs and results
+  // depend on both, and are applied only if the generation they started under
+  // is still current, so a slow reply for a previous selection can never land
+  // beside the new one.
   const generation = useRef(0);
+  // Bumped only when the well changes. The well's source detail does not
+  // depend on the scenario, so a scenario change must not discard it.
+  const wellGeneration = useRef(0);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const [wellList, scenarioList] = await Promise.all([listWells(), listScenarios()]);
+        // /health only says which dataset is served; if it fails, the well
+        // list still carries a per-well synthetic flag for the banner.
+        const [wellList, scenarioList, health] = await Promise.all([
+          listWells(),
+          listScenarios(),
+          getHealth().catch(() => null),
+        ]);
         if (cancelled) return;
         setWells(wellList);
+        setDataset(health?.dataset ?? null);
         setScenarios(scenarioList);
         const preferred = scenarioList.find((s) => s.name === DEFAULT_SCENARIO);
         if (preferred) setScenario(preferred.name);
@@ -93,6 +108,7 @@ export function ScreeningWorkspace() {
   const selectWell = useCallback(
     async (wellId: string) => {
       const gen = ++generation.current;
+      const wellGen = ++wellGeneration.current;
       setSelectedId(wellId);
       // A stale result beside a new well would be worse than no result.
       setResult(null);
@@ -100,17 +116,26 @@ export function ScreeningWorkspace() {
       setError(null);
       setDetail(null);
       setInputs(null);
-      try {
-        const [wellDetail, requiredInputs] = await Promise.all([
-          getWell(wellId),
-          getRequiredInputs(wellId, scenario),
-        ]);
-        if (gen !== generation.current) return;
-        setDetail(wellDetail);
-        setInputs(requiredInputs);
-      } catch (err) {
-        if (gen === generation.current) setError(messageFor(err));
-      }
+      // Two independent lifecycles: a scenario change while these are in
+      // flight supersedes the inputs request (changeScenario re-fetches it)
+      // but not the detail request, which only another well supersedes.
+      const loadDetail = async () => {
+        try {
+          const wellDetail = await getWell(wellId);
+          if (wellGen === wellGeneration.current) setDetail(wellDetail);
+        } catch (err) {
+          if (wellGen === wellGeneration.current) setError(messageFor(err));
+        }
+      };
+      const loadInputs = async () => {
+        try {
+          const requiredInputs = await getRequiredInputs(wellId, scenario);
+          if (gen === generation.current) setInputs(requiredInputs);
+        } catch (err) {
+          if (gen === generation.current) setError(messageFor(err));
+        }
+      };
+      await Promise.all([loadDetail(), loadInputs()]);
     },
     [scenario],
   );
@@ -181,24 +206,38 @@ export function ScreeningWorkspace() {
     }
   }
 
+  // Synthetic if the backend says so, or if any well it listed is flagged.
+  const synthetic = Boolean(dataset?.synthetic) || wells.some((w) => w.synthetic);
+
+  // `intro` (the page's explanation) renders after the synthetic-data banner,
+  // so on a phone the banner is the first thing on screen.
   if (loading) {
     return (
-      <p className="unavailable" role="status">
-        Loading wells from the screening backend...
-      </p>
+      <>
+        {intro}
+        <p className="unavailable" role="status">
+          Loading wells from the screening backend...
+        </p>
+      </>
     );
   }
 
   if (wells.length === 0) {
     return (
-      <Notice tone="stop" title="No wells available">
-        <p>{error ?? "The backend returned no wells."}</p>
-      </Notice>
+      <>
+        {intro}
+        <Notice tone="stop" title="No wells available">
+          <p>{error ?? "The backend returned no wells."}</p>
+        </Notice>
+      </>
     );
   }
 
   return (
     <>
+      {synthetic ? <DemoBanner dataset={dataset} /> : null}
+      {intro}
+
       {USING_DEV_FALLBACK_URL ? (
         <div style={{ marginBottom: 16 }}>
           <Notice tone="stop" title="Backend URL not configured">
@@ -223,7 +262,11 @@ export function ScreeningWorkspace() {
           <WellSelector wells={wells} selectedId={selectedId} onSelect={selectWell} />
           {detail ? <WellDetail detail={detail} inputs={inputs} /> : null}
           {selectedId ? (
+            // Keyed by well: switching wells remounts the form with every
+            // field empty, so one well's area and interval are never
+            // submitted for another.
             <InputForm
+              key={selectedId}
               scenarios={scenarios}
               scenario={scenario}
               required={inputs ? inputs.required : null}
@@ -253,6 +296,9 @@ export function ScreeningWorkspace() {
           ) : null}
 
           {busy ? <ResultSkeleton /> : null}
+          {!busy && (result?.dataset?.synthetic || comparison?.dataset?.synthetic) ? (
+            <SyntheticResultNotice />
+          ) : null}
           {!busy && result ? <ResultPanel result={result} /> : null}
           {!busy && result ? (
             <WarningsPanel interpretation={result.interpretation} />

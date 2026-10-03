@@ -23,6 +23,7 @@ import math
 from pathlib import Path
 
 import pytest
+from conftest import coolprop_propssi
 
 # =============================== INDEPENDENT ===============================
 # From the published equations. Nothing below this line may use ccs_screen.
@@ -277,7 +278,7 @@ def test_error_against_span_wagner_grows_with_pressure(well, depth_m, temperatur
     Phase 1 validated the EOS over 1-35 MPa. MALOSSA and TRECATE sit at 57 and
     63 MPa, where the constant Peneloux shift over-corrects to about +7%.
     """
-    PropsSI = pytest.importorskip("CoolProp.CoolProp").PropsSI
+    PropsSI = coolprop_propssi()
 
     pressure = independent_hydrostatic(BRINE_DENSITY, depth_m)
     reference = PropsSI("D", "P", pressure, "T", temperature_k, "CO2")
@@ -291,7 +292,7 @@ def test_error_against_span_wagner_grows_with_pressure(well, depth_m, temperatur
 
 def test_the_shift_helps_at_low_pressure_and_hurts_at_high():
     """The trade-off that makes Finding 11.1 a judgement rather than a bug."""
-    PropsSI = pytest.importorskip("CoolProp.CoolProp").PropsSI
+    PropsSI = coolprop_propssi()
 
     def errors(depth_m, temperature_k):
         pressure = independent_hydrostatic(BRINE_DENSITY, depth_m)

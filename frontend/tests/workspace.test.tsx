@@ -17,6 +17,7 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { ProjectIntro } from "@/components/AboutSections";
 import { ScreeningWorkspace } from "@/components/ScreeningWorkspace";
 import * as api from "@/lib/api";
 import { ApiClientError } from "@/lib/api";
@@ -26,6 +27,9 @@ import {
   approvedUnavailable,
   approvedValidated,
   blocked,
+  demoDataset,
+  demoHealth,
+  realHealth,
   legacyRequiredInputs,
   legacyScenario,
   requiredInputs,
@@ -87,6 +91,9 @@ async function runApproved(result = approvedValidated) {
 
 beforeEach(() => {
   vi.restoreAllMocks();
+  // Never reach for a real backend: the dataset is the real-sources one
+  // unless a test says otherwise.
+  vi.spyOn(api, "getHealth").mockResolvedValue(realHealth);
 });
 
 describe("well list and selection", () => {
@@ -829,5 +836,171 @@ describe("loading state", () => {
     expect(await screen.findByRole("status")).toHaveTextContent(/running screening/i);
     release(screened);
     await screen.findByText(/scenario-based storage capacity/i);
+  });
+});
+
+/** A promise the test resolves by hand, to hold a request in flight. */
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((r) => {
+    resolve = r;
+  });
+  return { promise, resolve };
+}
+
+describe("per-well state and overlapping requests (REVIEW-2026-10-01 #2, #3)", () => {
+  it("does not carry geological inputs from one well to the next", async () => {
+    stubHappyPath();
+    const spy = vi.spyOn(api, "screenWell").mockResolvedValue(approvedUnavailable);
+    const user = userEvent.setup();
+    render(<ScreeningWorkspace />);
+    await selectSaluzzo(user);
+    await fillApproved(user, "80", "1400", "1527");
+    expect(screen.getByLabelText(/storage area/i)).toHaveValue(80);
+
+    vi.spyOn(api, "getWell").mockResolvedValue({ ...wellDetail, canonical_id: "CRESCENTINO|1" });
+    await user.click(screen.getByRole("button", { name: /CRESCENTINO\|1/ }));
+    await screen.findByText("CRESCENTINO|1", { selector: "dd" });
+
+    // Every field is empty again: SALUZZO's interval is not CRESCENTINO's.
+    expect(screen.getByLabelText(/storage area/i)).toHaveValue(null);
+    expect(screen.getByLabelText(/z_top/i)).toHaveValue(null);
+    expect(screen.getByLabelText(/z_base/i)).toHaveValue(null);
+
+    // Submitting without re-entering anything sends nothing.
+    await user.click(screen.getByRole("button", { name: /run screening/i }));
+    expect(await screen.findByText("Storage area is required.")).toBeInTheDocument();
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it("loads source data when the scenario changes while the well detail is pending", async () => {
+    stubHappyPath();
+    const pendingWell = deferred<typeof wellDetail>();
+    vi.spyOn(api, "getWell").mockReturnValue(pendingWell.promise);
+    vi.spyOn(api, "getRequiredInputs").mockImplementation(async (_id, scenario) =>
+      scenario === legacyScenario.name ? legacyRequiredInputs : requiredInputs,
+    );
+    const user = userEvent.setup();
+    render(<ScreeningWorkspace />);
+    await user.click(await screen.findByRole("button", { name: /SALUZZO\|1/ }));
+    await user.selectOptions(screen.getByLabelText(/screening scenario/i), legacyScenario.name);
+    await screen.findByLabelText(/net reservoir thickness/i);
+
+    pendingWell.resolve(wellDetail);
+    expect(await screen.findByRole("heading", { name: /source data/i })).toBeInTheDocument();
+    expect(screen.getByText("SALUZZO|1", { selector: "dd" })).toBeInTheDocument();
+    expect(api.getWell).toHaveBeenCalledTimes(1);
+  });
+
+  it("still discards required inputs requested under the previous scenario", async () => {
+    stubHappyPath();
+    const staleInputs = deferred<typeof requiredInputs>();
+    vi.spyOn(api, "getRequiredInputs").mockImplementation((_id, scenario) =>
+      scenario === legacyScenario.name
+        ? Promise.resolve(legacyRequiredInputs)
+        : staleInputs.promise,
+    );
+    const user = userEvent.setup();
+    render(<ScreeningWorkspace />);
+    await user.click(await screen.findByRole("button", { name: /SALUZZO\|1/ }));
+    await user.selectOptions(screen.getByLabelText(/screening scenario/i), legacyScenario.name);
+    await screen.findByLabelText(/net reservoir thickness/i);
+
+    staleInputs.resolve(requiredInputs);
+    await staleInputs.promise;
+    await new Promise((r) => setTimeout(r, 0));
+    expect(screen.getByLabelText(/net reservoir thickness/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/z_top/i)).not.toBeInTheDocument();
+  });
+
+  it("discards a slow well detail and inputs for a well no longer selected", async () => {
+    stubHappyPath();
+    const slowDetail = deferred<typeof wellDetail>();
+    const slowInputs = deferred<typeof requiredInputs>();
+    vi.spyOn(api, "getWell").mockImplementation((id: string) =>
+      id === "SALUZZO|1"
+        ? slowDetail.promise
+        : Promise.resolve({ ...wellDetail, canonical_id: "CRESCENTINO|1" }),
+    );
+    vi.spyOn(api, "getRequiredInputs").mockImplementation((id: string) =>
+      id === "SALUZZO|1"
+        ? slowInputs.promise
+        : Promise.resolve({ ...legacyRequiredInputs, well_id: "CRESCENTINO|1" }),
+    );
+    const user = userEvent.setup();
+    render(<ScreeningWorkspace />);
+    await user.click(await screen.findByRole("button", { name: /SALUZZO\|1/ }));
+    await user.click(screen.getByRole("button", { name: /CRESCENTINO\|1/ }));
+    await screen.findByText("CRESCENTINO|1", { selector: "dd" });
+    await screen.findByLabelText(/net reservoir thickness/i);
+
+    slowDetail.resolve(wellDetail);
+    slowInputs.resolve(requiredInputs);
+    await Promise.all([slowDetail.promise, slowInputs.promise]);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(screen.getByText("CRESCENTINO|1", { selector: "dd" })).toBeInTheDocument();
+    expect(screen.queryByText("SALUZZO|1", { selector: "dd" })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/z_top/i)).not.toBeInTheDocument();
+  });
+});
+
+describe("synthetic demo dataset labelling", () => {
+  function stubDemo() {
+    stubHappyPath();
+    vi.spyOn(api, "getHealth").mockResolvedValue(demoHealth);
+    vi.spyOn(api, "getWell").mockResolvedValue({ ...wellDetail, dataset: demoDataset });
+  }
+
+  it("shows a prominent synthetic-data banner when the demo dataset is served", async () => {
+    stubDemo();
+    render(<ScreeningWorkspace />);
+    const banner = await screen.findByRole("region", { name: /synthetic demonstration data/i });
+    expect(banner).toHaveTextContent(/fictional/i);
+    expect(banner).toHaveTextContent(/not capacity estimates for\s+any real site/i);
+  });
+
+  it("puts the banner before the page introduction, so it is seen first on a phone", async () => {
+    stubDemo();
+    render(<ScreeningWorkspace intro={<ProjectIntro />} />);
+    const banner = await screen.findByRole("region", { name: /synthetic demonstration data/i });
+    const intro = screen.getByRole("region", { name: /what this is/i });
+    expect(banner.compareDocumentPosition(intro) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("shows no banner for the real sources", async () => {
+    stubHappyPath();
+    render(<ScreeningWorkspace />);
+    await screen.findByRole("button", { name: /SALUZZO\|1/ });
+    expect(
+      screen.queryByRole("region", { name: /synthetic demonstration data/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("still labels the demo when /health is unavailable but wells are flagged", async () => {
+    stubHappyPath();
+    vi.spyOn(api, "getHealth").mockRejectedValue(new ApiClientError("down", 0, "network"));
+    vi.spyOn(api, "listWells").mockResolvedValue(wells.map((w) => ({ ...w, synthetic: true })));
+    render(<ScreeningWorkspace />);
+    expect(
+      await screen.findByRole("region", { name: /synthetic demonstration data/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("labels the well detail and a result as synthetic", async () => {
+    stubDemo();
+    vi.spyOn(api, "screenWell").mockResolvedValue({ ...approvedValidated, dataset: demoDataset });
+    const user = userEvent.setup();
+    render(<ScreeningWorkspace />);
+    await selectSaluzzo(user);
+    expect(screen.getByText(/fictional demo well/i)).toBeInTheDocument();
+    await fillApproved(user);
+    await user.click(screen.getByRole("button", { name: /run screening/i }));
+    await screen.findByRole("heading", { name: /^result$/i });
+    expect(screen.getByText(/computed from fictional demo inputs/i)).toBeInTheDocument();
+  });
+
+  it("does not label a real-data result as synthetic", async () => {
+    await runApproved(approvedValidated);
+    expect(screen.queryByText(/computed from fictional demo inputs/i)).not.toBeInTheDocument();
   });
 });

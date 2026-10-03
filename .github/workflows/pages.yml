@@ -1,0 +1,72 @@
+name: Website (GitHub Pages)
+
+# Publishes the static PoreLedger CCS website to GitHub Pages at
+#   https://<owner>.github.io/<repository>/
+# Manual only: run it from the Actions tab once the backend is deployed.
+#
+# Required repository VARIABLE (Settings -> Secrets and variables -> Actions ->
+# Variables): CCS_PUBLIC_API_URL = the public HTTPS backend URL (no trailing
+# slash). The backend's CCS_CORS_ORIGINS must be https://<owner>.github.io.
+# Also: Settings -> Pages -> Source: "GitHub Actions".
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Require the backend URL
+        env:
+          API_URL: ${{ vars.CCS_PUBLIC_API_URL }}
+        run: |
+          case "$API_URL" in
+            https://*) echo "API: $API_URL" ;;
+            *) echo "Set the repository variable CCS_PUBLIC_API_URL to the HTTPS backend URL." >&2; exit 1 ;;
+          esac
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - run: npm ci
+      - run: npm test
+      - run: npm run typecheck
+
+      # Fails if the bundle would contain a loopback URL (scripts/build-static.mjs).
+      - name: Build the static website
+        env:
+          NEXT_PUBLIC_CCS_API_URL: ${{ vars.CCS_PUBLIC_API_URL }}
+          NEXT_PUBLIC_CCS_BASE_PATH: /${{ github.event.repository.name }}
+          NEXT_PUBLIC_CCS_REPO_URL: https://github.com/${{ github.repository }}
+          NEXT_PUBLIC_CCS_EMBED_ORIGINS: https://imansgh.me
+        run: npm run build:static
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: frontend/out
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

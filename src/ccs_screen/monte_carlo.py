@@ -13,6 +13,7 @@ any lies outside it (Model Contract M4); it never removes a draw.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, fields
 
 import numpy as np
@@ -47,6 +48,8 @@ class UniformPriors:
     def __post_init__(self) -> None:
         for field in fields(self):
             low, high = getattr(self, field.name)
+            if not (math.isfinite(low) and math.isfinite(high)):
+                raise ValueError(f"{field.name} bounds must be finite")
             if low <= 0:
                 raise ValueError(f"{field.name} lower bound must be positive")
             if high < low:

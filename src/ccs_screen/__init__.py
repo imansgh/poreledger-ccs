@@ -12,6 +12,7 @@ from ccs_screen.api import (
     USER_INPUT_SPEC,
     ApiError,
     ApprovedUserInputs,
+    DatasetNotReadyError,
     UnknownWellError,
     UserInputs,
 )
@@ -41,6 +42,7 @@ from ccs_screen.monte_carlo import (
     sample_mass_mt,
 )
 from ccs_screen.pressure import (
+    TheisDomainError,
     allowable_delta_p_pa,
     fracture_pressure_pa,
     max_injection_rate_m3_s,
@@ -77,6 +79,7 @@ __all__ = [
     "CapacitySample",
     "ConfigError",
     "DEPLETED_GAS_ANALOG",
+    "DatasetNotReadyError",
     "Diagnostic",
     "FEATURE_ORDER",
     "INTERPRETATION",
@@ -93,6 +96,7 @@ __all__ = [
     "ScreeningConfig",
     "StorageInterval",
     "SurrogateMetrics",
+    "TheisDomainError",
     "USER_INPUT_SPEC",
     "UniformPriors",
     "UnknownWellError",

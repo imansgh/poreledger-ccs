@@ -10,6 +10,7 @@
  */
 
 import type {
+  HealthInfo,
   RequiredInputs,
   ScenarioSummary,
   ScreenResult,
@@ -28,19 +29,21 @@ import type {
  * development convenience, but a production build that relies on it is flagged
  * so the UI can say so rather than appearing merely broken.
  */
-const CONFIGURED_API_URL = process.env.NEXT_PUBLIC_CCS_API_URL;
-const DEV_FALLBACK_URL = "http://127.0.0.1:8000";
-
-export const API_BASE_URL = CONFIGURED_API_URL ?? DEV_FALLBACK_URL;
+// Each use reads process.env.NEXT_PUBLIC_CCS_API_URL directly so the build
+// inlines it and folds these expressions: when the URL is set, the fallback
+// and its warning are removed from the bundle entirely (the published bundle
+// must not mention a loopback URL; scripts/build-static.mjs checks this).
+export const API_BASE_URL = process.env.NEXT_PUBLIC_CCS_API_URL || "http://127.0.0.1:8000";
 
 /** True when a production build is running on the development fallback. */
 export const USING_DEV_FALLBACK_URL =
-  !CONFIGURED_API_URL && process.env.NODE_ENV === "production";
+  !process.env.NEXT_PUBLIC_CCS_API_URL && process.env.NODE_ENV === "production";
 
-if (USING_DEV_FALLBACK_URL && typeof console !== "undefined") {
+if (!process.env.NEXT_PUBLIC_CCS_API_URL && process.env.NODE_ENV === "production" &&
+    typeof console !== "undefined") {
   console.error(
     "NEXT_PUBLIC_CCS_API_URL was not set at build time; falling back to " +
-      `${DEV_FALLBACK_URL}, which will not work for remote visitors.`,
+      `${API_BASE_URL}, which will not work for remote visitors.`,
   );
 }
 
@@ -49,8 +52,13 @@ export type ApiErrorKind =
   | "not_found"
   | "too_large"
   | "validation"
+  | "data_not_ready"
   | "server"
-  | "network";
+  | "network"
+  /** 429: the public deployment's per-client request limit. */
+  | "rate_limited"
+  /** 503 ServerBusy: all calculation slots of the public deployment are taken. */
+  | "busy";
 
 export class ApiClientError extends Error {
   readonly status: number;
@@ -77,6 +85,7 @@ function kindFor(status: number): ApiErrorKind {
   if (status === 404) return "not_found";
   if (status === 413) return "too_large";
   if (status === 422) return "validation";
+  if (status === 503) return "data_not_ready";
   return "server";
 }
 
@@ -105,7 +114,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     });
   } catch {
     throw new ApiClientError(
-      `Cannot reach the screening backend at ${API_BASE_URL}. Check that it is running.`,
+      `Cannot reach the calculation service at ${API_BASE_URL}. It may be starting up or temporarily offline; try again in a minute.`,
       0,
       "network",
     );
@@ -134,6 +143,17 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     throw new ApiClientError(summary, status, kind, fieldErrors);
   }
 
+  if (kind === "data_not_ready") {
+    // A controlled 503: a required data source on the backend is missing or
+    // unreadable. Its envelope names the sources; it never carries a trace.
+    const envelope = body as { type?: string; error?: string } | null;
+    const message =
+      envelope?.type === "DatasetNotReadyError" && typeof envelope.error === "string"
+        ? `The screening backend's dataset is not ready: ${envelope.error}`
+        : "The screening backend is temporarily unavailable.";
+    throw new ApiClientError(message, status, kind);
+  }
+
   if (kind === "server") {
     // Never echo a server body: it may contain a trace.
     throw new ApiClientError(
@@ -149,6 +169,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     (typeof envelope?.detail === "string" && envelope.detail) ||
     `Request failed with status ${status}.`;
   throw new ApiClientError(message, status, kind);
+}
+
+/** Liveness and the dataset in use (synthetic demo or real sources). */
+export function getHealth(): Promise<HealthInfo> {
+  return request<HealthInfo>("/health");
 }
 
 export function listWells(): Promise<WellSummary[]> {

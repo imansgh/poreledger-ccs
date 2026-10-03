@@ -2,15 +2,21 @@
   "name": "ccs-screening-frontend",
   "version": "0.1.0",
   "private": true,
+  "description": "PoreLedger CCS website: CO2 storage screening & uncertainty analysis (calls the FastAPI backend).",
+  "license": "MIT",
+  "author": "Iman Saghafifar",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "build:static": "node scripts/build-static.mjs",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run --exclude tests/integration.test.ts",
+    "test": "vitest run --exclude tests/integration.test.ts --exclude tests/demo.integration.test.ts --exclude tests/assessment.integration.test.ts",
     "test:watch": "vitest",
     "test:integration": "vitest run tests/integration.test.ts",
-    "test:all": "vitest run"
+    "test:all": "vitest run",
+    "test:demo": "vitest run tests/demo.integration.test.ts",
+    "test:assessment": "vitest run tests/assessment.integration.test.ts"
   },
   "dependencies": {
     "next": "^15.1.0",

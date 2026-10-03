@@ -49,6 +49,126 @@ jobs:
           ccs-screen --help
           ccs-screen --samples 100 --json
           ccs-ingest --help
+          python -c "from ccs_screen import assessment as a; a.data_file('synthetic-examples.json'); print('engine ready:', a.engine_readiness()['ready'])"
 
       - name: Run test suite
         run: python -m pytest -q
+
+      # The documented no-server demo walkthrough, from repository files only.
+      - name: Public demo walkthrough
+        run: python scripts/run_public_demo.py
+
+  # The checks behind the public density-accuracy claims. CoolProp is
+  # installed and CCS_REQUIRE_REFERENCE_TESTS=1 turns a missing reference
+  # dependency into a failure, so these cannot pass by being skipped.
+  reference-checks:
+    name: scientific reference checks (CoolProp, strict)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install package and CoolProp
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install ".[dev]" CoolProp
+
+      - name: Reference tests (no skips allowed)
+        env:
+          CCS_REQUIRE_REFERENCE_TESTS: "1"
+        run: >-
+          python -m pytest -rs
+          tests/test_independent_calculation_audit.py
+          tests/test_properties_audit.py
+          tests/test_properties.py
+          tests/test_assessment.py
+
+  frontend:
+    name: frontend (unit tests, typecheck, production build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      # `npm ci` installs exactly the committed lockfile and fails if
+      # package.json and package-lock.json disagree.
+      - name: Install dependencies from the lockfile
+        run: npm ci
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Production build
+        run: npm run build
+
+  frontend-integration:
+    name: frontend against a real backend (synthetic fixture)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install backend
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install ".[dev,web]"
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies from the lockfile
+        working-directory: frontend
+        run: npm ci
+
+      # The real data/ directory is git-ignored and never present here. The
+      # suite runs against a small deterministic synthetic dataset instead;
+      # setting CCS_INTEGRATION_DATA_DIR makes a missing or not-ready dataset
+      # a failure rather than a skip.
+      - name: Generate the synthetic integration dataset
+        run: python scripts/make_integration_fixture.py "${RUNNER_TEMP}/integration-data"
+
+      - name: Integration tests
+        working-directory: frontend
+        env:
+          CCS_INTEGRATION_DATA_DIR: ${{ runner.temp }}/integration-data
+          CCS_PYTHON: python
+        run: npm run test:integration
+
+      # The primary workflow against a real backend with NO dataset at all.
+      - name: User-assessment integration tests
+        working-directory: frontend
+        env:
+          CCS_PYTHON: python
+        run: npm run test:assessment
+
+      # The bundled synthetic demo dataset ships with the repository, so this
+      # suite never skips.
+      - name: Demo integration tests
+        working-directory: frontend
+        env:
+          CCS_PYTHON: python
+        run: npm run test:demo

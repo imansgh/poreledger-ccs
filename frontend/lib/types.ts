@@ -110,6 +110,26 @@ export interface Capacity {
   deterministic: boolean;
 }
 
+/**
+ * Which dataset the backend serves. `synthetic` is true for the bundled demo
+ * dataset, whose wells and values are all fictional.
+ */
+export interface DatasetInfo {
+  kind: "structured_sources" | "synthetic_demo" | "none";
+  synthetic: boolean;
+  name: string;
+  version?: string | null;
+  statement?: string | null;
+}
+
+/** GET /health: liveness, plus whether the dataset is usable. */
+export interface HealthInfo {
+  status: "ok";
+  data_ready: boolean;
+  dataset: DatasetInfo;
+  wells_loaded: number;
+}
+
 export interface WellSummary {
   well_id: string;
   original_names: string[];
@@ -121,6 +141,7 @@ export interface WellSummary {
   screenable_without_user_inputs: boolean;
   depth_datum?: string;
   approved_model_depth_reference?: DepthReferenceStatus;
+  synthetic?: boolean;
 }
 
 export interface FieldValue {
@@ -147,6 +168,7 @@ export interface WellDetail {
   required_user_inputs: string[];
   approved_model_depth_reference?: DepthReferenceStatus;
   interpretation: Interpretation;
+  dataset?: DatasetInfo;
 }
 
 export interface RequiredInputSpec {
@@ -173,6 +195,7 @@ export interface RequiredInputs {
   can_be_screened_with_user_inputs: boolean;
   depth_reference?: DepthReferenceStatus;
   interpretation: Interpretation;
+  dataset?: DatasetInfo;
 }
 
 export interface TemperatureDetail {
@@ -186,6 +209,7 @@ export interface TemperatureDetail {
 
 /** A NOT_VALIDATED legacy screening result (placeholder scenarios). */
 export interface LegacyScreenResult {
+  dataset?: DatasetInfo;
   model_path: "LEGACY_NOT_VALIDATED";
   validation_status: "NOT_VALIDATED";
   status: "screened" | "blocked";
@@ -301,6 +325,7 @@ export interface SampledInput {
 
 /** The approved-model result: both named water-level scenarios. */
 export interface ApprovedScreenResult {
+  dataset?: DatasetInfo;
   model_path: "APPROVED_MODEL";
   status: "evaluated" | "blocked";
   well_id: string;
@@ -353,6 +378,7 @@ export interface TemperatureVariant {
 }
 
 export interface TemperatureComparison {
+  dataset?: DatasetInfo;
   status: string;
   well_id: string | null;
   selected_method: string | null;

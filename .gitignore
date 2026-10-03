@@ -5,7 +5,7 @@ __pycache__/
 .DS_Store
 
 # Local well-log / seismic dump (11 GB, mirrored from videpi.com). Never commit.
-data/
+/data/
 .cursor/
 build/
 dist/
@@ -14,3 +14,23 @@ dist/
 # Local environment. .env.example is the committed template.
 .env
 .env.local
+
+# Local caches and agent tooling; not part of the research software release.
+.mypy_cache/
+.ruff_cache/
+.agents/
+.claude/
+skills-lock.json
+
+# Local review notes and primary-document transcriptions. Redistribution of
+# the real source corpus is not established. Keep these in the workspace.
+/REVIEW*.md
+/USA-DATA-ASSESSMENT*.md
+/docs/well-data-readiness/
+/docs/well-data-readiness-audit.*
+/docs/depth-and-interval-decision-matrix.csv
+/docs/depth-reference-resolution.md
+/docs/storage-interval-evidence.md
+/docs/niche-*.md
+/docs/*comparable-tools-research*.md
+/docs/europe-comparable-tools*.md

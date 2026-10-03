@@ -1,0 +1,36 @@
+# Local, self-contained demo stack: the API on the bundled SYNTHETIC dataset
+# and the website, both on localhost.
+#
+#   docker compose up --build
+#   open http://localhost:3000
+#
+# Real data instead of the demo: mount the directory read-only and point
+# CCS_DATA_DIR at it, e.g.
+#     volumes: ["./data:/data:ro"]
+#     environment: { CCS_DATA_DIR: /data }
+# A missing or unreadable real dataset makes /ready/existing-data answer 503;
+# it does not fall back to the demo, and user assessments keep working.
+# See docs/deployment.md.
+services:
+  api:
+    build:
+      context: .
+      dockerfile: deploy/backend.Dockerfile
+    environment:
+      CCS_DATA_DIR: /app/demo/data
+      CCS_CORS_ORIGINS: http://localhost:3000
+      CCS_DOCS: "1"
+    ports:
+      - "127.0.0.1:8000:8000"
+
+  web:
+    build:
+      context: .
+      dockerfile: deploy/frontend.Dockerfile
+      args:
+        # Compiled into the bundle; the browser calls this URL directly.
+        NEXT_PUBLIC_CCS_API_URL: http://localhost:8000
+    depends_on:
+      - api
+    ports:
+      - "127.0.0.1:3000:3000"

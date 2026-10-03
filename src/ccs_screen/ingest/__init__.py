@@ -68,7 +68,7 @@ from ccs_screen.ingest.scenario import (
     resolve_inputs,
 )
 from ccs_screen.ingest.identity import WellIdentity, canonical_well_id, normalize_name, same_well
-from ccs_screen.ingest.normalize import WellNormalizer
+from ccs_screen.ingest.normalize import SourceStatus, WellNormalizer
 from ccs_screen.ingest.provenance import (
     Confidence,
     Conflict,
@@ -139,6 +139,7 @@ __all__ = [
     "ScreeningFunnel",
     "ScreeningScenario",
     "SourceRef",
+    "SourceStatus",
     "StratigraphicInterval",
     "StructuredSources",
     "TemperatureComparison",

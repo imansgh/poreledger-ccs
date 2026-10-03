@@ -1,0 +1,63 @@
+name: Bug report
+description: Something in the software behaves incorrectly (crash, wrong error, UI problem, broken setup).
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        For a disagreement with a *scientific* result (a status, a capacity, a guard), use the
+        **Scientific / model proposal** template instead. An `UNAVAILABLE` result for a real well is
+        usually the correct outcome, not a bug.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Commands, requests or clicks. Prefer the synthetic demo dataset (`python scripts/serve.py --demo`) so others can reproduce it.
+      placeholder: |
+        1. python scripts/serve.py --demo
+        2. curl -X POST ... -d @demo/requests/approved-validated.json
+        3. ...
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - HTTP API
+        - Website
+        - Python API / engine
+        - Ingestion
+        - CLI (ccs-screen / ccs-ingest)
+        - Setup, CI or deployment
+    validations:
+      required: true
+  - type: dropdown
+    id: dataset
+    attributes:
+      label: Dataset
+      options:
+        - Synthetic demo (demo/data)
+        - Real data (not shareable)
+        - Test fixture
+        - Not applicable
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, Python and Node versions, browser, commit.
+  - type: textarea
+    id: logs
+    attributes:
+      label: Output or logs
+      description: Do not paste credentials, private paths or data you are not allowed to share.
+      render: text

@@ -68,7 +68,23 @@ from ccs_screen.ingest.assumptions import (
     Citation,
     EvidenceClass,
 )
-from ccs_screen.ingest.normalize import WellNormalizer
+from ccs_screen.ingest.demo import (
+    DEMO_DATASET_KIND,
+    DEMO_MANIFEST,
+    STRUCTURED_SOURCES,
+    DatasetInfo,
+    DemoDatasetError,
+    is_demo_dataset,
+    load_demo_dataset,
+)
+from ccs_screen.ingest.normalize import (
+    SOURCE_CONFLICT,
+    SOURCE_LOADED,
+    SOURCE_UNREADABLE,
+    SourceStatus,
+    WellNormalizer,
+)
+from ccs_screen.ingest.sources import GEOTHOPICA_FILE, PO_WELLS_FILE, POZZI_STORICI_FILE
 from ccs_screen.ingest.provenance import Confidence
 from ccs_screen.ingest.records import NormalizedWellRecord, ThicknessKind
 from ccs_screen.ingest.report import (
@@ -364,6 +380,24 @@ APPROVED_UNCERTAINTY_BAND_WARNING = {
 
 #: Owner decision O2, as an interpretation warning, so a client that renders
 #: warnings shows the label next to any legacy number.
+#: Attached to every response served from the synthetic demo dataset.
+SYNTHETIC_DATASET_WARNING = {
+    "code": "synthetic_demo_dataset",
+    "severity": "synthetic",
+    "message": (
+        "SYNTHETIC DEMONSTRATION DATA: this well and every value read for it are "
+        "fictional. The result is not a capacity estimate for any real site."
+    ),
+    "detail": (
+        "The demo dataset exists so the software can be run without the owner's local "
+        "data. A VALIDATED status here means only that fictional inputs fell inside the "
+        "model's validated EOS envelope; it says nothing about a real reservoir."
+    ),
+    "affects": ["all values"],
+    "invalidates_result": True,
+    "correction_applied": False,
+}
+
 NOT_VALIDATED_WARNING = {
     "code": "not_validated_legacy_path",
     "severity": "not_validated",
@@ -472,6 +506,20 @@ class ApiError(ValueError):
 
 class UnknownWellError(ApiError):
     """No well with that canonical id."""
+
+
+class DatasetNotReadyError(ApiError):
+    """A required source could not be loaded, so no well can be served.
+
+    ``sources`` is every source's load outcome (``SourceStatus``), so the
+    caller can say which file, which sheet and why.
+    """
+
+    def __init__(self, data_dir: str | Path, sources: tuple[Any, ...]) -> None:
+        self.sources = sources
+        failed = [s for s in sources if s.required and not s.ok]
+        self.problems = [f"required source {s.source} {s.status}: {s.detail}" for s in failed]
+        super().__init__(f"dataset in {data_dir} is not ready: " + "; ".join(self.problems))
 
 
 def validate_samples(samples: Any) -> int:
@@ -977,7 +1025,90 @@ class ApprovedUserInputs:
 # -- record access -----------------------------------------------------------
 
 _CACHE: dict[str, tuple[NormalizedWellRecord, ...]] = {}
+#: Per-source load outcome of the normalization cached in ``_CACHE``. Only a
+#: normalization in which every required source loaded is cached.
+_SOURCE_STATUS: dict[str, tuple[SourceStatus, ...]] = {}
+#: Which kind of dataset each cached directory holds (demo or real sources).
+_DATASET_INFO: dict[str, DatasetInfo] = {}
 _CACHE_LOCK = threading.Lock()
+
+
+def _demo_status(status: str, detail: str | None = None) -> SourceStatus:
+    return SourceStatus("synthetic-demo", DEMO_MANIFEST, True, status, detail)
+
+
+def _normalize(path: Path) -> tuple[tuple[NormalizedWellRecord, ...],
+                                    tuple[SourceStatus, ...], DatasetInfo]:
+    """Build the records for one data directory, demo or real.
+
+    A directory is the synthetic demo dataset exactly when it holds the demo
+    manifest. Mixing the manifest with real source files is refused rather
+    than resolved, so synthetic and real data are never combined and a real
+    data directory never silently falls back to demo data.
+    """
+    if not is_demo_dataset(path):
+        normalizer = WellNormalizer(path)
+        records = tuple(normalizer.run())
+        return records, tuple(getattr(normalizer, "source_status", ())), STRUCTURED_SOURCES
+
+    demo_info = DatasetInfo(kind=DEMO_DATASET_KIND, synthetic=True,
+                            name="Synthetic demonstration dataset")
+    real = [name for name in (GEOTHOPICA_FILE, POZZI_STORICI_FILE, PO_WELLS_FILE)
+            if (path / name).exists()]
+    if real:
+        return (), (_demo_status(SOURCE_CONFLICT, (
+            f"{DEMO_MANIFEST} is in the same directory as real source file(s) "
+            f"{', '.join(real)}; keep synthetic demo data and real data in separate "
+            "directories")),), demo_info
+    try:
+        records, info = load_demo_dataset(path)
+    except DemoDatasetError as exc:
+        return (), (_demo_status(SOURCE_UNREADABLE, str(exc)),), demo_info
+    deriver = WellNormalizer(path)
+    for record in records:
+        deriver.derive(record)
+    ordered = tuple(sorted(records, key=lambda r: r.canonical_id))
+    return ordered, (_demo_status(SOURCE_LOADED),), info
+
+
+#: An empty data directory setting means "no existing well dataset": the
+#: deployment serves user assessments only.
+NO_DATASET = DatasetInfo(kind="none", synthetic=False,
+                         name="No existing well dataset configured")
+NO_DATASET_MESSAGE = ("no existing well dataset is configured (CCS_DATA_DIR is empty); "
+                      "user assessments (/assessments/*) do not need one")
+
+
+def _no_dataset(data_dir: str | Path) -> bool:
+    return not str(data_dir).strip()
+
+
+def dataset_info(data_dir: str | Path = DEFAULT_DATA_DIR) -> dict[str, Any]:
+    """Which kind of dataset ``data_dir`` holds; never raises.
+
+    ``synthetic`` is true for the demo dataset, also when it failed to load.
+    """
+    if _no_dataset(data_dir):
+        return NO_DATASET.to_dict()
+    key = str(Path(data_dir).resolve())
+    info = _DATASET_INFO.get(key)
+    if info is None:
+        info = (DatasetInfo(kind=DEMO_DATASET_KIND, synthetic=True,
+                            name="Synthetic demonstration dataset")
+                if is_demo_dataset(data_dir) else STRUCTURED_SOURCES)
+    return info.to_dict()
+
+
+def _with_dataset(payload: dict[str, Any], data_dir: str | Path) -> dict[str, Any]:
+    """Attach the dataset block, and the synthetic warning when it applies."""
+    info = dataset_info(data_dir)
+    payload["dataset"] = info
+    if info["synthetic"]:
+        interpretation = payload.get("interpretation")
+        if isinstance(interpretation, dict):
+            interpretation["warnings"] = ([dict(SYNTHETIC_DATASET_WARNING)]
+                                          + list(interpretation.get("warnings", [])))
+    return payload
 
 
 def load_records(data_dir: str | Path = DEFAULT_DATA_DIR,
@@ -998,7 +1129,15 @@ def load_records(data_dir: str | Path = DEFAULT_DATA_DIR,
     mutable dataclass. Nothing in this module mutates them; a future handler
     that did would contaminate every subsequent request. ``refresh=True``
     rebuilds rather than mutating.
+
+    Raises :class:`DatasetNotReadyError` when a required source is missing,
+    unreadable or lacks its reader dependency. That outcome is *not* cached,
+    neither as records nor as a success: the next call normalizes again, so a
+    repaired dataset is picked up without a restart, and a failed refresh
+    evicts the previously cached records rather than keep serving them.
     """
+    if _no_dataset(data_dir):
+        raise ApiError(NO_DATASET_MESSAGE)
     key = str(Path(data_dir).resolve())
     if not refresh:
         cached = _CACHE.get(key)
@@ -1014,7 +1153,14 @@ def load_records(data_dir: str | Path = DEFAULT_DATA_DIR,
             cached = _CACHE.get(key)
             if cached is not None:
                 return cached
-        records = tuple(WellNormalizer(path).run())
+        records, statuses, info = _normalize(path)
+        if any(status.required and not status.ok for status in statuses):
+            _CACHE.pop(key, None)
+            _SOURCE_STATUS.pop(key, None)
+            _DATASET_INFO.pop(key, None)
+            raise DatasetNotReadyError(path, statuses)
+        _SOURCE_STATUS[key] = statuses
+        _DATASET_INFO[key] = info
         _CACHE[key] = records
         return records
 
@@ -1022,6 +1168,44 @@ def load_records(data_dir: str | Path = DEFAULT_DATA_DIR,
 def clear_cache() -> None:
     with _CACHE_LOCK:
         _CACHE.clear()
+        _SOURCE_STATUS.clear()
+        _DATASET_INFO.clear()
+
+
+def data_readiness(data_dir: str | Path = DEFAULT_DATA_DIR) -> dict[str, Any]:
+    """Whether the dataset is usable, as distinct from the process being alive.
+
+    Ready means the data directory exists, every *required* source loaded
+    (the GEOTHOPICA workbook sheets, read with openpyxl), and at least one
+    well was normalized. A missing *optional* source (the registry CSVs, which
+    only enrich wells) is reported in ``sources`` but does not make the
+    dataset unready. Never raises for a dataset problem; it reports it.
+    Programming errors are not dataset problems and still propagate.
+
+    Readiness is about the software's inputs, not the science: a ready
+    dataset can still yield ``UNAVAILABLE`` approved results, for example for
+    wells whose depth reference is not established.
+    """
+    problems: list[str] = []
+    try:
+        records = load_records(data_dir)
+    except DatasetNotReadyError as exc:
+        return {"ready": False, "wells_loaded": 0,
+                "sources": [status.to_dict() for status in exc.sources],
+                "problems": list(exc.problems), "dataset": dataset_info(data_dir)}
+    except ApiError as exc:
+        return {"ready": False, "wells_loaded": 0, "sources": [], "problems": [str(exc)],
+                "dataset": dataset_info(data_dir)}
+    statuses = _SOURCE_STATUS.get(str(Path(data_dir).resolve()), ())
+    if not records:
+        problems.append(f"no wells normalized from {data_dir}")
+    return {
+        "ready": not problems,
+        "wells_loaded": len(records),
+        "sources": [status.to_dict() for status in statuses],
+        "problems": problems,
+        "dataset": dataset_info(data_dir),
+    }
 
 
 def _record(well_id: str, data_dir: str | Path) -> NormalizedWellRecord:
@@ -1080,7 +1264,9 @@ def _depth_reference_status(record: NormalizedWellRecord) -> dict[str, Any]:
 def list_wells(data_dir: str | Path = DEFAULT_DATA_DIR) -> list[dict[str, Any]]:
     """Every normalized well, with enough detail for a picker."""
     out = []
-    for record in load_records(data_dir):
+    records = load_records(data_dir)
+    synthetic = dataset_info(data_dir)["synthetic"]
+    for record in records:
         out.append({
             "well_id": record.canonical_id,
             "original_names": sorted({r.original_name for r in record.raw_records})
@@ -1093,6 +1279,7 @@ def list_wells(data_dir: str | Path = DEFAULT_DATA_DIR) -> list[dict[str, Any]]:
             "screenable_without_user_inputs": False,
             "depth_datum": record.depth_datum.value,
             "approved_model_depth_reference": _depth_reference_status(record),
+            "synthetic": synthetic,
         })
     return out
 
@@ -1104,7 +1291,7 @@ def get_well(well_id: str, data_dir: str | Path = DEFAULT_DATA_DIR) -> dict[str,
     payload["required_user_inputs"] = list(REQUIRED_USER_INPUTS)
     payload["approved_model_depth_reference"] = _depth_reference_status(record)
     payload["interpretation"] = _approved_interpretation()
-    return payload
+    return _with_dataset(payload, data_dir)
 
 
 def required_user_inputs(well_id: str, scenario: str | ScreeningScenario = DEFAULT_SCENARIO,
@@ -1115,8 +1302,12 @@ def required_user_inputs(well_id: str, scenario: str | ScreeningScenario = DEFAU
     ``z_top``, ``z_base`` for the approved model; ``area_m2``, ``thickness_m``
     for a NOT_VALIDATED legacy scenario.
     """
-    record = _record(well_id, data_dir)
-    base = _scenario(scenario)
+    return _with_dataset(_required_user_inputs(_record(well_id, data_dir), _scenario(scenario)),
+                         data_dir)
+
+
+def _required_user_inputs(record: NormalizedWellRecord,
+                          base: ScreeningScenario) -> dict[str, Any]:
     if is_approved_parameter_set(base):
         reference = _depth_reference_status(record)
         approved_blockers = ([] if reference["diagnostic"] is None else [{
@@ -1182,8 +1373,8 @@ def screen_well(well_id: str,
     base = _scenario(scenario)
     samples = validate_samples(samples)
     if is_approved_parameter_set(base):
-        return _screen_approved(record, base, user_inputs, samples, seed)
-    return _screen_legacy(record, base, user_inputs, samples, seed)
+        return _with_dataset(_screen_approved(record, base, user_inputs, samples, seed), data_dir)
+    return _with_dataset(_screen_legacy(record, base, user_inputs, samples, seed), data_dir)
 
 
 def _screen_approved(record: NormalizedWellRecord, base: ScreeningScenario,
@@ -1344,7 +1535,7 @@ def compare_temperature_methods(
         resolved_inputs = (user_inputs if isinstance(user_inputs, UserInputs)
                            else UserInputs.from_mapping(user_inputs))
     except ApiError as exc:
-        return _blocked_for_user_inputs(record, base, str(exc))
+        return _with_dataset(_blocked_for_user_inputs(record, base, str(exc)), data_dir)
 
     active = _with_user_inputs(base, resolved_inputs)
     comparison = _compare_methods(record, active, samples=samples, seed=seed)
@@ -1363,7 +1554,7 @@ def compare_temperature_methods(
         "as an engineering assumption; a well without a usable reservoir "
         "temperature stays blocked."
     )
-    return payload
+    return _with_dataset(payload, data_dir)
 
 
 FLEET_INTERVAL_NOT_DEFINED = (
@@ -1395,7 +1586,7 @@ def screening_funnel(scenario: str | ScreeningScenario = DEFAULT_SCENARIO,
     if is_approved_parameter_set(base):
         if user_inputs is not None:
             raise ApiError(FLEET_INTERVAL_NOT_DEFINED)
-        return _approved_funnel(records, base)
+        return _with_dataset(_approved_funnel(records, base), data_dir)
 
     if user_inputs is None:
         active = base
@@ -1408,7 +1599,7 @@ def screening_funnel(scenario: str | ScreeningScenario = DEFAULT_SCENARIO,
     payload["validation_status"] = NOT_VALIDATED
     payload["interpretation"] = _interpretation(active, not_validated=True)
     payload["required_user_inputs"] = list(LEGACY_REQUIRED_USER_INPUTS)
-    return payload
+    return _with_dataset(payload, data_dir)
 
 
 def _approved_funnel(records: tuple[NormalizedWellRecord, ...],

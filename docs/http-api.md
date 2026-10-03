@@ -1,11 +1,18 @@
 # HTTP API
 
-FastAPI wrapper over `ccs_screen.api`. It translates HTTP to those calls and
-does nothing else: no science, no defaults, no interpretation of its own.
+FastAPI wrapper over `ccs_screen.api` and `ccs_screen.assessment`. It
+translates HTTP to those calls and does nothing else: no science, no defaults,
+no interpretation of its own.
+
+The primary workflow is **user assessments** (`/assessments/*`): your own well
+or site data, evaluated by the approved model, with no dataset on the server.
+The **existing-data** endpoints (`/wells`, `/funnel`) are optional and need a
+dataset in `CCS_DATA_DIR`.
 
 ```bash
 pip install -e ".[ingest,web]"
-uvicorn ccs_screen.web.app:app --reload
+python scripts/serve.py --demo --cors-origin http://localhost:3000   # synthetic demo dataset
+python scripts/serve.py --data-dir data                              # real sources
 # interactive docs at /docs
 ```
 
@@ -13,7 +20,15 @@ uvicorn ccs_screen.web.app:app --reload
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| GET | `/health` | liveness, well count, published limits |
+| GET | `/health` | liveness (always `200` while serving), `engine_ready`, `data_ready`, well count, published limits |
+| GET | `/ready` | **engine readiness**: `200` when user assessments can be evaluated, whatever the dataset |
+| GET | `/ready/existing-data` | optional dataset readiness: `200` when ready, `503` with the problems otherwise |
+| GET | `/assessments/contract` | the input schema: fields, units, conventions, methods, limits |
+| GET | `/assessments/examples` | the four synthetic examples (a `ccs-assessment/1` document) |
+| GET | `/assessments/files/{name}` | download `assessment-template.{json,csv}` or `synthetic-examples.{json,csv}` |
+| POST | `/assessments/parse` | parse an uploaded JSON or CSV file into an editable document; problems with row numbers; nothing evaluated |
+| POST | `/assessments/validate` | validate and normalize a document; nothing evaluated |
+| POST | `/assessments/evaluate` | validate, then evaluate every assessment with the approved model |
 | GET | `/wells` | every normalized well |
 | GET | `/wells/{well_id}` | one well, full field-level provenance |
 | GET | `/wells/{well_id}/inputs` | what the caller must supply |
@@ -106,6 +121,7 @@ inside the storage efficiency by construction.
 | 400 | `ApiError` -- a valid-shaped request the domain refuses (e.g. unknown scenario) |
 | 404 | `UnknownWellError` |
 | 413 | Request body over the configured cap |
+| 503 | `GET /ready`: the dataset is not ready. Any data endpoint: `DatasetNotReadyError`, a required source is missing or unreadable |
 | 422 | Schema violation: unknown field, wrong type, out-of-range `samples`, a non-finite number (`NaN`, `Infinity`, `-Infinity`) |
 | 500 | Unexpected server error; the body never carries a traceback |
 
@@ -139,6 +155,144 @@ still accepted and range-checked for backwards compatibility, and has no effect.
 coerced, and out-of-range values are rejected rather than clamped. The bound is
 published in the OpenAPI schema and in `/health`.
 
+The body cap is enforced on the bytes actually received, not only on the
+declared `Content-Length`: a declared length over the cap is refused before
+any byte is read, and a chunked (or under-declared) body is counted chunk by
+chunk and abandoned the moment it passes the cap, so at most one chunk beyond
+the cap is ever read. Keep a matching limit at the reverse proxy as well.
+
+## Dataset and synthetic demo data
+
+`/health`, `/ready` and every data response (`/wells/{id}`, `/wells/{id}/inputs`,
+`/screen`, `/temperature`, `/funnel`) carry a `dataset` block:
+
+```json
+{"kind": "synthetic_demo", "synthetic": true,
+ "name": "CCS screening synthetic demonstration dataset", "version": "1",
+ "statement": "Every well, name, depth, datum, elevation and temperature in this file is fictional. ..."}
+```
+
+`kind` is `structured_sources` (real data, `synthetic: false`) or
+`synthetic_demo`. Each `/wells` summary carries `synthetic` (boolean). When the
+dataset is synthetic, every interpretation block's `warnings` starts with
+`synthetic_demo_dataset` (`invalidates_result: true` for any real-world use).
+A data directory is the demo only when it holds `ccs-synthetic-demo.json`; see
+[demo/README.md](../demo/README.md). These are additive fields; no existing
+field changed.
+
+## User assessments
+
+Request bodies for `validate` and `evaluate`:
+
+```json
+{"document": {"schema_version": "ccs-assessment/1", "assessments": [...]},
+ "samples": 2000, "seed": 42}
+```
+
+`parse` takes `{"format": "csv" | "json", "content": "<file text>"}` and
+returns `{document, preview_document, problems, valid, import_blocked}`.
+`import_blocked` is true when the parser itself reported an error:
+conflicting assessment-level cells across rows, an incomplete observation
+row, a wrong row length, conflicting schema versions. What was parsed is then
+partial (it keeps the first row's values and drops the bad rows), so
+`document` is `null` and the partial data comes back as `preview_document`,
+for display only. The preview carries a top-level `blocked_import` marker
+(`format`, `reason`, and the parser `problems` with row numbers); `validate`
+and `evaluate` reject any document carrying it with a single
+`IMPORT_BLOCKED` problem (422 from `evaluate`), however the rest of it is
+edited. Correct the file and parse it again. Validation problems of a
+complete document never block: `document` is returned and can be corrected.
+The marker prevents accidental evaluation of a partial import; it is not a
+signature, and a caller who removes it has built a new document of their own. The schema, units, CSV layout and limits
+are in [assessment-input-schema.md](assessment-input-schema.md).
+
+`evaluate` returns `{schema_version, run, notices, assessments, summary_csv}`.
+Each entry of `assessments` has `assessment_id`, `synthetic`, `data_origin`,
+`model`, `run`, `outcome` (`overall_status`; `category` = `estimate`,
+`partial_estimate`, `information_needed` or `outside_validated_range`;
+per-scenario statuses with readable labels; `blocking_reasons`, each distinct
+reason once with a plain `title`, `explanation`, `action`, the exact `code` and
+`technical_message`, and the `scenarios` it affects; `main_reason` and
+`next_action` for the first of them), `inputs` (normalized, with originals),
+`provenance`, `result` (the engine's approved-model payload, identical in
+shape to `/wells/{id}/screen` except that each observation in
+`temperature_selection` also carries `input_index`, its position in the
+submitted `temperature_observations`), `interpretation` and `limitations`.
+In `summary_csv`, user text that a spreadsheet could evaluate as a formula is
+prefixed with `'` (see [assessment-input-schema.md](assessment-input-schema.md)).
+A number too large to represent (e.g. `1e400` written as an integer) is an
+input error (`NOT_FINITE`), never a server error. Input
+errors return **422** with `type: "AssessmentValidationError"` and every
+problem (`path`, `row`, `code`, `message`, `severity`) in `detail`; notices
+(inputs that will make a result `UNAVAILABLE`) never block.
+
+Nothing submitted is stored or logged; see [data-handling.md](data-handling.md).
+Requests under `/assessments` have their own body cap, 256 KiB by default
+(`CCS_MAX_ASSESSMENT_BODY_BYTES`).
+
+## Liveness and readiness
+
+`GET /health` is **liveness**. It answers `200` with `status: "ok"` whenever
+the process is serving -- including when the data directory is missing or
+empty -- and adds `engine_ready`, `data_ready` (booleans) and `wells_loaded`.
+
+`GET /ready` is **engine readiness** (changed in the user-assessment release;
+it used to report dataset readiness, which moved to `/ready/existing-data`).
+It evaluates the complete synthetic example once through the approved engine
+and answers `200` when both named scenarios come back `VALIDATED`, otherwise
+`503`. It does **not** depend on any well dataset; `existing_data` in the body
+reports that for information only:
+
+```json
+{"status": "ready",
+ "engine": {"ready": true, "check": "evaluates the synthetic example SYNTH ALPHA|1 ...",
+            "problem": null, "schema_version": "ccs-assessment/1"},
+ "existing_data": {"ready": false, "dataset": {...}, "wells_loaded": 0,
+                   "detail": "/ready/existing-data"}}
+```
+
+`GET /ready/existing-data` is **optional dataset readiness** (the former
+`/ready`):
+
+```json
+{"status": "ready", "wells_loaded": 46, "data_dir": "data",
+ "sources": [{"source": "GEOTHOPICA:Anagrafica", "file": "Requested_data_GEOTHOPICA_pozzi_piemonte.xlsx",
+              "required": true, "status": "loaded", "detail": null}],
+ "problems": []}
+```
+
+It is `200` when the data directory exists, every **required** source loaded,
+and at least one well was normalized; otherwise `503` with `status:
+"not_ready"` and the reasons in `problems`. Required sources are the three
+GEOTHOPICA workbook sheets (`Anagrafica`, `Temperature`, `Lito-Stratigrafie`),
+read with `openpyxl`. Each source's `status` is one of:
+
+| `status` | Meaning |
+| --- | --- |
+| `loaded` | Read successfully |
+| `missing` | The file, or the workbook sheet, is absent |
+| `dependency_missing` | The reader dependency (`openpyxl`) is not installed |
+| `conflict` | The synthetic demo manifest shares a directory with real source files; refused so the two are never combined |
+| `unreadable` | Present but cannot be read: an inaccessible file (`OSError`), a corrupt or truncated ZIP container, a workbook missing its package parts, malformed workbook or sheet XML, or a sheet with no header row. `detail` names the file, the sheet and the underlying error, e.g. `cannot read Requested_data_GEOTHOPICA_pozzi_piemonte.xlsx (Anagrafica): BadZipFile: File is not a zip file` | The registry CSVs (`pozzi-storici.csv`,
+`po_wells_clean.csv`) only enrich wells the workbook defines and remain
+**optional**: their absence is listed in `sources` but does not make the
+dataset unready. Failed required sources are also logged as warnings, and
+`ccs-ingest` prints them to stderr and reports `source_status` in its JSON.
+
+When a required source is not `loaded`, nothing is cached: no records, and no
+success. Data endpoints (`/wells`, `/wells/{id}`, `/screen`, `/funnel`, ...)
+then answer `503` with the usual envelope, `type: "DatasetNotReadyError"`, and
+the failed required sources as a list in `detail`. Each later request reads the
+sources again, so a repaired dataset is picked up without a restart. Startup
+cache warming treats the same failures as expected: the process still starts
+and serves `/health` and `/ready`. Only those expected read and format
+failures are translated; a programming error still surfaces as a `500` (and in
+the server log), never as a dataset status.
+
+Readiness concerns the software's inputs only. A ready dataset still returns
+`UNAVAILABLE` approved-model results wherever the Model Contract requires it
+(for example, a well whose depth reference is not established).
+
 ## Configuration
 
 | Variable | Default | Notes |
@@ -169,13 +323,21 @@ cold-cache burst normalizes once rather than once per worker.
 
 ## Rate limiting
 
-**Not implemented, deliberately.** Doing it properly needs state shared across
-workers (Redis or similar); an in-process counter would be wrong the moment a
-second worker starts and would give a false sense of protection. Rate limiting
-belongs at the reverse proxy or API gateway.
+Always enforced in-process: the request-body cap, `MAX_SAMPLES` per request,
+and at most 200 000 realisations per assessment request.
 
-What *is* enforced in-process: the request-body cap, and `MAX_SAMPLES` bounding
-CPU per request.
+Opt-in, for a public **single-process** deployment (both off by default):
+
+- `CCS_RATE_LIMIT_PER_MINUTE`: POST requests per client address per rolling
+  minute. Over it: **429** `{"type": "RateLimited", ...}` with `Retry-After`.
+- `CCS_MAX_CONCURRENT_EVALUATIONS`: Monte Carlo runs at once (assessment
+  evaluation, well screening, temperature comparison). Over it: **503**
+  `{"type": "ServerBusy", ...}` with `Retry-After`; requests are not queued.
+
+`Retry-After` is exposed to the allowed CORS origins. `GET /assessments/contract`
+reports the active values in `deployment_limits` (0 = off). The state is per
+process: with several workers or instances, enforce limits at the reverse proxy
+or API gateway instead (see [deployment.md](deployment.md)).
 
 ## Response contract: approved model
 

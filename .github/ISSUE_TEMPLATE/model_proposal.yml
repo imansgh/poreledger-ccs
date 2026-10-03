@@ -1,0 +1,45 @@
+name: Scientific / model proposal
+description: Propose a change to the model, a prior, a guard, a status rule, or how source data is interpreted.
+labels: ["science"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The approved Model Contract (`docs/phase13-owner-decision-record.md`)
+        changes only through an explicit, recorded owner decision. Proposals are welcome; please make
+        the evidence and the consequences reviewable. Do not open a pull request that changes
+        scientific behaviour before the proposal is accepted.
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed change
+      description: Which equation, prior, eligibility rule, guard, status or interpretation, and how.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: Primary sources (with pages), data, and why they support the change.
+    validations:
+      required: true
+  - type: textarea
+    id: consequences
+    attributes:
+      label: Consequences
+      description: Which wells or results change, which statuses move (e.g. UNAVAILABLE -> VALIDATED), and what new failure modes or assumptions this introduces.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+  - type: checkboxes
+    id: guardrails
+    attributes:
+      label: Guardrails
+      options:
+        - label: The proposal does not make a result appear by assuming a datum, inventing an interval, substituting a temperature, or filling a missing value without evidence
+          required: true
+        - label: Provenance for any new input is defined (source, method, confidence)
+          required: true

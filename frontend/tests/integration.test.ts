@@ -11,21 +11,29 @@
  *     npm run test:integration
  *
  * Requirements: the repository's Python environment with `.[dev,web]`
- * installed, and the `data/` directory present.
+ * installed, and a dataset: the local `data/` directory by default, or the
+ * directory named by CCS_INTEGRATION_DATA_DIR. CI generates a small synthetic
+ * one with `scripts/make_integration_fixture.py` and points this variable at
+ * it; the real dataset is git-ignored. CCS_PYTHON overrides the interpreter.
  *
  * Skipping policy: if `data/` is absent the suite skips, so a contributor
- * without the dataset is not blocked. If `data/` IS present but the backend
- * will not start, that is a hard failure -- a silently skipped integration
- * test is worse than none, because it reports green while verifying nothing.
+ * without the dataset is not blocked. If CCS_INTEGRATION_DATA_DIR is set, the
+ * dataset is required and its absence is a failure. If the dataset IS present
+ * but the backend will not start or reports the data not ready (`/ready/existing-data`),
+ * that is a hard failure -- a silently skipped integration test is worse than
+ * none, because it reports green while verifying nothing.
  */
 
 import { spawn, type ChildProcess } from "node:child_process";
 import { existsSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { afterAll, beforeAll, describe, expect, it, type TaskContext } from "vitest";
 
 const REPO_ROOT = dirname(process.cwd());
-const DATA_DIR = join(REPO_ROOT, "data");
+const DATA_DIR = process.env.CCS_INTEGRATION_DATA_DIR
+  ? resolve(process.env.CCS_INTEGRATION_DATA_DIR)
+  : join(REPO_ROOT, "data");
+const DATA_REQUIRED = Boolean(process.env.CCS_INTEGRATION_DATA_DIR);
 const PORT = Number(process.env.CCS_TEST_PORT ?? 8787);
 const BASE = `http://127.0.0.1:${PORT}`;
 const WELL = "SALUZZO|1";
@@ -40,23 +48,33 @@ const haveData = existsSync(DATA_DIR);
  * `beforeAll` has run, so it would always see the initial `false`. */
 function requireBackend(ctx: TaskContext): boolean {
   if (!haveData) {
+    if (DATA_REQUIRED) {
+      throw new Error(`CCS_INTEGRATION_DATA_DIR is set but ${DATA_DIR} does not exist`);
+    }
     ctx.skip();
     return false;
   }
   if (!available) {
     throw new Error(
-      `data/ exists but the backend never became healthy at ${BASE}. ${startupError}`,
+      `${DATA_DIR} exists but the backend never became ready at ${BASE}. ${startupError}`,
     );
   }
   return true;
 }
 
-async function waitForHealth(timeoutMs = 45_000): Promise<boolean> {
+/** Wait for liveness (/health), then require existing-data readiness (/ready/existing-data). */
+async function waitForReady(timeoutMs = 45_000): Promise<boolean> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     try {
       const response = await fetch(`${BASE}/health`);
-      if (response.ok) return true;
+      if (response.ok) {
+        const ready = await fetch(`${BASE}/ready/existing-data`);
+        if (ready.ok) return true;
+        const body = (await ready.json()) as { problems?: string[] };
+        startupError = `data not ready: ${(body.problems ?? []).join("; ")}`;
+        return false;
+      }
     } catch {
       // not up yet
     }
@@ -68,7 +86,7 @@ async function waitForHealth(timeoutMs = 45_000): Promise<boolean> {
 beforeAll(async () => {
   if (!haveData) return;
 
-  const python = process.platform === "win32" ? "python" : "python3";
+  const python = process.env.CCS_PYTHON ?? (process.platform === "win32" ? "python" : "python3");
   backend = spawn(
     python,
     ["-m", "uvicorn", "ccs_screen.web.app:app", "--port", String(PORT), "--log-level", "warning"],
@@ -77,7 +95,7 @@ beforeAll(async () => {
       env: {
         ...process.env,
         PYTHONPATH: join(REPO_ROOT, "src"),
-        CCS_DATA_DIR: "data",
+        CCS_DATA_DIR: DATA_DIR,
         CCS_CORS_ORIGINS: "http://localhost:3000",
       },
       stdio: "ignore",
@@ -88,7 +106,7 @@ beforeAll(async () => {
     startupError = `spawn failed: ${err.message}`;
   });
 
-  available = await waitForHealth();
+  available = await waitForReady();
   if (!available) startupError ||= "health check timed out";
 }, 60_000);
 

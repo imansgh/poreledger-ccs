@@ -1,0 +1,74 @@
+{
+  "dataset_kind": "synthetic_demo",
+  "synthetic": true,
+  "name": "CCS screening synthetic demonstration dataset",
+  "version": "1",
+  "statement": "Every well, name, depth, datum, elevation and temperature in this file is fictional. It exists so the software can be run and inspected without the owner's local datasets. Nothing here is a measurement, no result computed from it describes a real site, and a VALIDATED status on this data means only that fictional inputs fell inside the model's validated EOS envelope.",
+  "wells": [
+    {
+      "name": "SYNTH ALPHA 1",
+      "description": "Ground-level depth datum declared, an eligible corrected temperature inside the demo interval: the approved model can evaluate both named water-level scenarios.",
+      "depth_m": 1650,
+      "depth_datum": "ground_level",
+      "surface_elevation_m": 240,
+      "operator": "Fictional Operator (synthetic)",
+      "year": 2001,
+      "outcome": "synthetic",
+      "temperatures": [
+        {"depth_m": 5, "temperature_c": 13, "method": "surface_air_mean", "depth_datum": "ground_level"},
+        {"depth_m": 1500, "temperature_c": 51, "method": "non_stabilized", "depth_datum": "ground_level", "hours_since_circulation": 6},
+        {"depth_m": 1500, "temperature_c": 58, "method": "extrapolated_squarci_taffi", "depth_datum": "ground_level"}
+      ],
+      "intervals": [
+        {"top_m": 0, "bottom_m": 420, "lithology": "synthetic clay unit", "age": "SYNTHETIC UNIT A"},
+        {"top_m": 420, "bottom_m": 1650, "lithology": "synthetic sand unit", "age": "SYNTHETIC UNIT B"}
+      ]
+    },
+    {
+      "name": "SYNTH BETA 1",
+      "description": "Same kind of data, but the source states no depth datum: the approved model must return UNAVAILABLE (DEPTH_REFERENCE_NOT_ESTABLISHED), exactly as for every current real well.",
+      "depth_m": 1700,
+      "depth_datum": "unknown",
+      "surface_elevation_m": 180,
+      "operator": "Fictional Operator (synthetic)",
+      "year": 1998,
+      "outcome": "synthetic",
+      "temperatures": [
+        {"depth_m": 1450, "temperature_c": 55, "method": "extrapolated_squarci_taffi", "depth_datum": "unknown"}
+      ],
+      "intervals": [
+        {"top_m": 0, "bottom_m": 1700, "lithology": "synthetic sand unit", "age": "SYNTHETIC UNIT B"}
+      ]
+    },
+    {
+      "name": "SYNTH GAMMA 1",
+      "description": "Ground-level datum and an eligible temperature, but deep and hot: the state point falls outside the validated EOS envelope, so the result is OUTSIDE_VALIDATED_ENVELOPE with a diagnostic capacity only.",
+      "depth_m": 3900,
+      "depth_datum": "ground_level",
+      "surface_elevation_m": 120,
+      "operator": "Fictional Operator (synthetic)",
+      "year": 2010,
+      "outcome": "synthetic",
+      "temperatures": [
+        {"depth_m": 3500, "temperature_c": 142, "method": "extrapolated_squarci_taffi", "depth_datum": "ground_level"}
+      ],
+      "intervals": [
+        {"top_m": 0, "bottom_m": 3900, "lithology": "synthetic carbonate unit", "age": "SYNTHETIC UNIT C"}
+      ]
+    },
+    {
+      "name": "SYNTH DELTA 1",
+      "description": "Ground-level datum, but the only temperature is a non-stabilized reading, which is not an eligible method: the approved model returns UNAVAILABLE (no eligible temperature).",
+      "depth_m": 2100,
+      "depth_datum": "ground_level",
+      "surface_elevation_m": 300,
+      "operator": "Fictional Operator (synthetic)",
+      "year": 1987,
+      "outcome": "synthetic",
+      "temperatures": [
+        {"depth_m": 1950, "temperature_c": 66, "method": "non_stabilized", "depth_datum": "ground_level", "hours_since_circulation": 4}
+      ],
+      "intervals": []
+    }
+  ]
+}

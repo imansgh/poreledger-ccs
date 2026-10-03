@@ -1,0 +1,83 @@
+{
+  "schema_version": "ccs-assessment/1",
+  "assessments": [
+    {
+      "id": "SYNTH ALPHA|1",
+      "name": "Synthetic example: complete inputs",
+      "synthetic": true,
+      "example": {
+        "key": "validated",
+        "demonstrates": "A complete assessment: ground-level datum, TVD depths, total depth, ground elevation and an eligible Squarci-Taffi temperature inside the interval. Both named scenarios are VALIDATED because the fictional conditions fall inside the approved envelope."
+      },
+      "storage_area": {"value": 20, "unit": "km2", "source": "fictional"},
+      "storage_interval": {"top": 1450, "base": 1550, "unit": "m", "source": "fictional"},
+      "depth_reference": {"datum": "ground_level", "convention": "TVD", "source": "fictional"},
+      "surface_elevation": {"value": 240, "unit": "m", "reference": "msl", "source": "fictional"},
+      "total_depth": {"value": 1650, "unit": "m", "source": "fictional"},
+      "temperature_observations": [
+        {"value": 13, "unit": "degC", "depth": 5, "depth_unit": "m", "depth_datum": "ground_level", "depth_convention": "TVD", "method": "surface_air_mean", "source": "fictional"},
+        {"value": 51, "unit": "degC", "depth": 1500, "depth_unit": "m", "depth_datum": "ground_level", "depth_convention": "TVD", "method": "non_stabilized", "source": "fictional"},
+        {"value": 58, "unit": "degC", "depth": 1500, "depth_unit": "m", "depth_datum": "ground_level", "depth_convention": "TVD", "method": "extrapolated_squarci_taffi", "source": "fictional"}
+      ],
+      "stratigraphy": [
+        {"top": 0, "base": 420, "unit": "m", "description": "synthetic clay unit"},
+        {"top": 420, "base": 1650, "unit": "m", "description": "synthetic sand unit"}
+      ],
+      "notes": "Fictional well. Not a measurement."
+    },
+    {
+      "id": "SYNTH BETA|1",
+      "name": "Synthetic example: depth datum unknown",
+      "synthetic": true,
+      "example": {
+        "key": "unavailable-depth-reference",
+        "demonstrates": "The same kind of data, but the depth datum is declared unknown. The approved model applies no datum assumption, so both scenarios are UNAVAILABLE (DEPTH_REFERENCE_NOT_ESTABLISHED)."
+      },
+      "storage_area": {"value": 20, "unit": "km2", "source": "fictional"},
+      "storage_interval": {"top": 1400, "base": 1500, "unit": "m", "source": "fictional"},
+      "depth_reference": {"datum": "unknown", "convention": "TVD", "source": "fictional"},
+      "surface_elevation": {"value": 180, "unit": "m", "reference": "msl", "source": "fictional"},
+      "total_depth": {"value": 1700, "unit": "m", "source": "fictional"},
+      "temperature_observations": [
+        {"value": 55, "unit": "degC", "depth": 1450, "depth_unit": "m", "depth_datum": "unknown", "depth_convention": "TVD", "method": "extrapolated_squarci_taffi", "source": "fictional"}
+      ],
+      "notes": "Fictional well. Not a measurement."
+    },
+    {
+      "id": "SYNTH GAMMA|1",
+      "name": "Synthetic example: outside the validated envelope",
+      "synthetic": true,
+      "example": {
+        "key": "outside-envelope",
+        "demonstrates": "Complete inputs, but deep and hot: the state point lies outside the density model's validated envelope, so both scenarios are OUTSIDE_VALIDATED_ENVELOPE and only a diagnostic value, not an estimate, is reported."
+      },
+      "storage_area": {"value": 20, "unit": "km2", "source": "fictional"},
+      "storage_interval": {"top": 3450, "base": 3550, "unit": "m", "source": "fictional"},
+      "depth_reference": {"datum": "ground_level", "convention": "TVD", "source": "fictional"},
+      "surface_elevation": {"value": 120, "unit": "m", "reference": "msl", "source": "fictional"},
+      "total_depth": {"value": 3900, "unit": "m", "source": "fictional"},
+      "temperature_observations": [
+        {"value": 142, "unit": "degC", "depth": 3500, "depth_unit": "m", "depth_datum": "ground_level", "depth_convention": "TVD", "method": "extrapolated_squarci_taffi", "source": "fictional"}
+      ],
+      "notes": "Fictional well. Not a measurement."
+    },
+    {
+      "id": "SYNTH DELTA|1",
+      "name": "Synthetic example: no eligible temperature",
+      "synthetic": true,
+      "example": {
+        "key": "unavailable-temperature",
+        "demonstrates": "Ground-level datum and TVD depths, but the only temperature is a non-stabilized reading, which is not an eligible method. Temperature is never assumed, so both scenarios are UNAVAILABLE."
+      },
+      "storage_area": {"value": 20, "unit": "km2", "source": "fictional"},
+      "storage_interval": {"top": 1900, "base": 2000, "unit": "m", "source": "fictional"},
+      "depth_reference": {"datum": "ground_level", "convention": "TVD", "source": "fictional"},
+      "surface_elevation": {"value": 300, "unit": "m", "reference": "msl", "source": "fictional"},
+      "total_depth": {"value": 2100, "unit": "m", "source": "fictional"},
+      "temperature_observations": [
+        {"value": 66, "unit": "degC", "depth": 1950, "depth_unit": "m", "depth_datum": "ground_level", "depth_convention": "TVD", "method": "non_stabilized", "source": "fictional"}
+      ],
+      "notes": "Fictional well. Not a measurement."
+    }
+  ]
+}
