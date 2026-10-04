@@ -2,8 +2,8 @@
 
 ## 0.2.0 - release candidate
 
-Status reviewed 2026-10-04. This records implemented work, not a published tag
-or an available hosted service. The Python distribution remains `ccs-screen`.
+Status reviewed 2026-10-04. Source is public in `imansgh/poreledger-ccs`
+on `main`; this is not a published tag or an available hosted service. The Python distribution remains `ccs-screen`.
 
 - PoreLedger CCS identity, MIT license for code and project documentation.
 - Manual and CSV/JSON assessment inputs, editable review, unit normalization,
@@ -26,8 +26,8 @@ not uncertainty in every measurement. The software selects supplied corrected
 temperatures; it does not correct raw measurements or convert MD to TVD.
 
 Local verification on 2026-10-03: 1,626 Python tests, 186 strict reference
-checks and 209 frontend tests passed. Counts are a dated snapshot. Public CI,
-container execution and live cross-origin calculation/download verification
-are not established by these results. The iframe shrink behaviour and service
+checks and 209 frontend tests passed. Counts are a dated snapshot. GitHub CI also passed for merged commit
+`5c8e85a96171a9de38088951dc79a79be02f23ec`. Container execution and live
+cross-origin calculation/download verification remain outstanding. The iframe shrink behaviour and service
 status recovery identified in review still need correction/verification before
 accepting the public demo. See [publication guide](docs/public-release.md).

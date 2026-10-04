@@ -1,9 +1,9 @@
 # Public release and live demo
 
-How PoreLedger CCS is published and how its live demo is reached from
-`https://imansgh.me`. Status: **prepared, not published**. The software exists on a private development branch and the portfolio
-page has been prepared in Lovable preview. Public repository creation and
-production deployment remain separate steps. See [release-decisions.md](release-decisions.md).
+Public source is available at `https://github.com/imansgh/poreledger-ccs`.
+The merged 0.2.0 code and documentation are on `main`. The portfolio page
+exists in Lovable preview; the hosted calculation demo is not yet deployed.
+See [release-decisions.md](release-decisions.md).
 
 ## 1. What is published
 
@@ -40,35 +40,23 @@ Owner decisions about published content are listed in
 documentation. It grants no rights to external datasets, well reports or
 publications, including the Italian well records the audit documents cite.
 
-## 2. Repository and history (recommendation)
+## 2. Repository and history
 
-The current remote, `imansgh/ccs_UI`, is **private**. Its history contains
-files the release deliberately excludes (deleted evidence transcriptions
-`docs/finding-3.1-*` and `docs/finding-4.2-*`, a deleted personal note) and
-commits under two personal e-mail addresses. Making that repository public
-or renaming it would publish all of that.
+On 2026-10-04 the existing `imansgh/ccs_UI` repository was observed renamed
+to `imansgh/poreledger-ccs` and public. The owner explicitly chose to keep
+this repository, retain older branches and put the current version on `main`.
+PR #7 was merged into `phase15a/software-hardening`; `main` was created from
+that merged version after its GitHub CI completed successfully.
 
-Recommended: create a **new public repository `imansgh/poreledger-ccs`**
-whose first commit is the reviewed tree, and keep `ccs_UI` private as the
-research history. After authorization (Git Bash, from this directory):
+This supersedes the earlier recommendation for a new history-free repository.
+Changing names or default branches does not remove history. Deleted research
+notes and previous commit metadata remain part of that history. Do not add
+local source documents, credentials or unpublished data to new commits.
 
-```bash
-REL=../poreledger-ccs-release
-mkdir "$REL"
-git ls-files -z --cached --others --exclude-standard | xargs -0 cp --parents -t "$REL"
-cd "$REL"
-git init -b main
-git config user.name "Iman Saghafifar"
-git config user.email "<your GitHub noreply address>"   # avoids publishing a personal address
-git add -A
-git commit -m "PoreLedger CCS 0.2.0: initial public release"
-gh repo create imansgh/poreledger-ccs --public --source . --push \
-  --description "PoreLedger CCS: CO2 storage screening & uncertainty analysis (research software)" \
-  --homepage "https://imansgh.me/poreledger-ccs"
-```
-
-The CI workflow then runs on the first push (Python 3.10-3.12, strict
-CoolProp reference checks, frontend tests, type check and build).
+Use `main` for current development and set it as the GitHub default branch.
+Existing research branches are retained; none are deleted or archived by this
+transition. Public source availability does not mean the interactive demo is
+hosted or that a release tag exists.
 
 ## 3. Live-demo architecture
 

@@ -1,8 +1,8 @@
 # Release decisions
 
-Owner decisions for the public release, and what is still open. Documentation and GitHub updates for this version were requested on
-2026-10-04. This does not by itself change repository visibility or deploy
-the live service.
+Owner decisions for the public release, and what is still open. On 2026-10-04 the owner chose to keep the existing public repository,
+use main for the current version and retain older branches. Live service
+deployment remains unfinished.
 How the release is assembled: [public-release.md](public-release.md).
 
 ## Confirmed
@@ -19,8 +19,8 @@ How the release is assembled: [public-release.md](public-release.md).
 
 | Decision | Status | Notes |
 | --- | --- | --- |
-| **Public release / production deployment** | Pending | Private development is on GitHub; public release and live-demo deployment are separate, unfinished steps. |
-| **Repository and history** | Pending; recommendation in [public-release.md](public-release.md) | The current remote `imansgh/ccs_UI` is private. Its history contains files the release excludes (deleted evidence transcriptions, a deleted personal note) and two author e-mail addresses. Recommended: a new public repository `poreledger-ccs` with one initial commit of the reviewed tree; keep `ccs_UI` private. |
+| **Public source** | Available | The existing repository was renamed to `imansgh/poreledger-ccs` and made public. No tagged release or live demo is implied. |
+| **Repository and history** | Owner confirmed 2026-10-04 | Keep this repository and its history. `main` contains the merged 0.2.0 code and documentation; retain older branches for now. This supersedes the earlier fresh-repository recommendation. |
 | **Backend host** | Pending | No backend hosting account is configured. The website host (GitHub Pages) needs no new account. A no-cost container host is recommended in [public-release.md](public-release.md); creating it is the owner's action. |
 | **Website change on imansgh.me** | Prepared in Lovable preview, 2026-10-03; production publication pending | The `/poreledger-ccs` page, project card and sitemap entry exist in preview. Demo/repository URLs are unset until verified. Activation instructions: [public-release.md](public-release.md). The existing page `/projects/co2-storage-screening-dashboard` describes a different tool (`imansgh/CO-Storage-Screening-Dashboard`); it was preserved. |
 | **Real-data redistribution** | Not established | The real structured sources and the document corpus are not in the release and must not be added until their terms are confirmed. The published audit and design records (e.g. `scientific-validation-audit.md`, `piemonte-ntg-evidence.md`) and some tests quote individual values from public Italian well records (ViDEPI / UNMIG registries) with attribution. Confirm this is acceptable before publishing, or remove those records from the public tree. |

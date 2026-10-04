@@ -7,14 +7,14 @@ Python/FastAPI calculation service and a Next.js website. You declare the
 inputs, the model's fixed priors and assumptions are shown with every result,
 and runs are reproducible (fixed seed, exported inputs and settings).
 
-**Version:** 0.2.0 (release candidate; no public release is claimed).
+**Version:** 0.2.0 (release candidate; no tagged release is claimed).
 
 | Component | Current status |
 | --- | --- |
 | Assessment engine and local interface | Implemented and tested; run locally using the quick start below |
 | Portfolio page | Prepared in Lovable preview at `/poreledger-ccs`; not published on imansgh.me |
 | Hosted interactive demo | Not active; HTTPS backend and static hosting still need deployment and end-to-end verification |
-| Public repository | `imansgh/poreledger-ccs` is the intended publication destination, not a verified public release |
+| Public source | [imansgh/poreledger-ccs](https://github.com/imansgh/poreledger-ccs), current code and documentation on `main`; no tagged release yet |
 
 See [release notes](CHANGELOG.md), [publication guide](docs/public-release.md)
 and [release decisions](docs/release-decisions.md). The personal website link

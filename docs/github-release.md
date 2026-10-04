@@ -1,10 +1,10 @@
 # GitHub presentation for version 0.2.0
 
-Status: release candidate, reviewed 2026-10-04. The current accessible source
-repository is private `imansgh/ccs_UI`, on `phase15a/software-hardening`.
-The intended public name `imansgh/poreledger-ccs` is not yet a verified public
-release. Do not change visibility of the research-history repository as part
-of a README update.
+Status: release candidate, reviewed 2026-10-04. Public source is now
+`imansgh/poreledger-ccs`. The owner chose to retain the renamed repository
+and its history, put the merged current version on `main`, and keep older
+branches. The source is public; the hosted calculation service and tagged
+release are still pending.
 
 ## Repository About fields
 
@@ -20,8 +20,8 @@ Suggested topics: `carbon-storage`, `ccs`, `geoenergy`, `scientific-computing`,
 `python`, `fastapi`, `nextjs`, `monte-carlo`, `uncertainty-quantification`.
 
 These are prepared metadata values, not confirmation that GitHub settings were
-changed. The new public repository should use a reviewed fresh tree, preserving
-the private history separately; see [public-release.md](public-release.md).
+changed. The owner chose to retain this repository and history; see
+[public-release.md](public-release.md).
 
 ## Release description
 
