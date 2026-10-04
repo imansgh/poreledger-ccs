@@ -22,12 +22,12 @@ Python package (`src/ccs_screen/assessment_data/`).
 
 ## The public demo
 
-The live demo linked from imansgh.me (see [public-release.md](public-release.md))
-runs exactly this software with [`deploy/public-demo.env`](../deploy/public-demo.env):
+The public demo is not deployed yet. Its planned configuration (see
+[public-release.md](public-release.md)) uses [`deploy/public-demo.env`](../deploy/public-demo.env):
 no well dataset, no application access log, the rate limit above, and CORS
-open only to the website's origin. Two hosting providers are involved, and
-each keeps its own infrastructure logs under its own policy, outside this
-software's control:
+open only to the website's origin. The planned architecture uses separate static and API hosts. Their
+infrastructure logging policies must be checked when a provider is selected;
+they are outside this software's control:
 
 - the static website host (GitHub Pages) receives the page and asset
   requests, never your data;

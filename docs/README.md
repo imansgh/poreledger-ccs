@@ -1,9 +1,14 @@
 # Documentation index
 
+Current target: **0.2.0 release candidate**. The portfolio page is prepared
+in Lovable preview; the hosted calculation demo is not active.
+
 ## Start here
 
 | Document | What it is for |
 | --- | --- |
+| [../CHANGELOG.md](../CHANGELOG.md) | Version 0.2.0 changes and known release limitations |
+| [github-release.md](github-release.md) | Accurate GitHub description, topics and release checklist |
 | [../README.md](../README.md) | Purpose, what is computed and not assessed, quick start, the user-data workflow |
 | [assessment-input-schema.md](assessment-input-schema.md) | **Input contract** for your own data: JSON and CSV formats, units, conventions, limits, templates |
 | [validation-evidence.md](validation-evidence.md) | What the calculations are checked against, measured density errors, and the limits of that evidence |

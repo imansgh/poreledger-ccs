@@ -32,7 +32,7 @@ eligible temperature methods and guards apply to these wells as to real ones.
   `"dataset_kind": "synthetic_demo"` and `"synthetic": true`, and every well
   name must start with `SYNTH`, or it is rejected.
 - A directory holding both the manifest and real source files is refused
-  (`/ready` reports a `conflict`), so demo and real data are never combined.
+  (`/ready/existing-data` reports the dataset conflict; `/ready` checks engine readiness), so demo and real data are never combined.
 - A missing or broken real dataset never falls back to the demo.
 - Every API response from the demo carries `dataset.synthetic: true` and leads
   its warnings with `synthetic_demo_dataset`; every well summary carries
@@ -63,3 +63,9 @@ expectations are pinned by `tests/test_demo_dataset.py` and
 Keep it small and fictional. Any new well must start with `SYNTH`, and its
 purpose should be one clearly explained model outcome. Update the tables above
 and the tests in the same change.
+
+## Release status
+
+These are local synthetic examples, not an already-hosted demo. Version 0.2.0
+publication status and the separate Lovable portfolio preview are tracked in
+[the main README](../README.md) and [the publication guide](../docs/public-release.md).

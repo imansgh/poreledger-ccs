@@ -1,9 +1,9 @@
 # Public release and live demo
 
 How PoreLedger CCS is published and how its live demo is reached from
-`https://imansgh.me`. Status: **prepared, not published**. Nothing has been
-pushed, made public or deployed; each step below that changes something
-outside this working copy is the owner's action, after authorization.
+`https://imansgh.me`. Status: **prepared, not published**. The software exists on a private development branch and the portfolio
+page has been prepared in Lovable preview. Public repository creation and
+production deployment remain separate steps. See [release-decisions.md](release-decisions.md).
 
 ## 1. What is published
 
@@ -73,9 +73,9 @@ CoolProp reference checks, frontend tests, type check and build).
 ## 3. Live-demo architecture
 
 ```
-visitor ── https://imansgh.me/poreledger-ccs            (Lovable site: page with an iframe)
-             └─ iframe https://imansgh.github.io/poreledger-ccs/   (GitHub Pages: static website)
-                   └─ fetch https://<backend-host>/assessments/*   (FastAPI container, HTTPS)
+visitor â”€â”€ https://imansgh.me/poreledger-ccs            (Lovable site: page with an iframe)
+             â””â”€ iframe https://imansgh.github.io/poreledger-ccs/   (GitHub Pages: static website)
+                   â””â”€ fetch https://<backend-host>/assessments/*   (FastAPI container, HTTPS)
 ```
 
 Why this shape (checked against the live site on 2026-10-02):
@@ -137,10 +137,10 @@ curl -s $API/assessments/contract | grep -o '"deployment_limits":{[^}]*}'
 
 ## 5. Website (GitHub Pages)
 
-1. Repository *Settings → Pages → Source*: **GitHub Actions**.
-2. *Settings → Secrets and variables → Actions → Variables*: add
+1. Repository *Settings â†’ Pages â†’ Source*: **GitHub Actions**.
+2. *Settings â†’ Secrets and variables â†’ Actions â†’ Variables*: add
    `CCS_PUBLIC_API_URL` = the backend's HTTPS URL (no trailing slash).
-3. *Actions → "Website (GitHub Pages)" → Run workflow.* It runs the frontend
+3. *Actions â†’ "Website (GitHub Pages)" â†’ Run workflow.* It runs the frontend
    tests and type check, then `npm run build:static` (base path
    `/poreledger-ccs`, repository link, embed origin `https://imansgh.me`),
    which fails on a non-HTTPS API URL or any loopback URL in the bundle.
@@ -153,30 +153,38 @@ The same bundle can be built locally with
 
 ## 6. imansgh.me (Lovable)
 
-The site needs one new page and a link to it. Ready-to-use page:
-[`deploy/lovable/poreledger-ccs.tsx`](../deploy/lovable/poreledger-ccs.tsx)
-(copy to `src/routes/poreledger-ccs.tsx`; it follows the site's existing
-project pages and uses its `SectionHeader`). It shows the title and
-disclaimers, "Open the demo full screen" and "Source code (MIT)" buttons,
-and the embedded demo, which grows with its content. Its iframe sandbox
-allows exactly what the demo needs: scripts and its own origin (API calls),
-forms and file upload, downloads (exports), new tabs (repository link) and a
-user-initiated top-level link (the footer's link back to imansgh.me).
+The portfolio integration was implemented in Lovable preview on 2026-10-03:
+a `/poreledger-ccs` route, a project card, metadata and a sitemap entry.
+It has not been published to imansgh.me. The separate Streamlit project page
+was preserved.
 
-Alternatively, paste this into the Lovable chat for the website project:
+The website project uses these files:
 
-> Add a new page at the route `/poreledger-ccs` (file
-> `src/routes/poreledger-ccs.tsx`) using exactly the code I provide
-> [paste the file]. Then add a project card for "PoreLedger CCS — CO₂ Storage
-> Screening & Uncertainty Analysis" to the Projects page, styled like the
-> existing cards, linking to `/poreledger-ccs`, with tags Python, FastAPI,
-> Next.js, CCS, Monte Carlo, MIT License, and add `/poreledger-ccs` to the
-> sitemap. Do not change any other page.
+- `src/routes/poreledger-ccs.tsx`: project explanation and scientific limitations;
+- `src/components/PoreLedgerCard.tsx`: Projects-page card;
+- `src/components/PoreLedgerDemo.tsx`: preparation state or configured iframe;
+- `src/lib/poreledger-config.ts`: optional HTTPS URLs, unset by default.
 
-Decide separately what happens to the existing page
-`/projects/co2-storage-screening-dashboard`, which describes a different
-tool (`imansgh/CO-Storage-Screening-Dashboard`): keep it, link the two, or
-retire it.
+Activate only after verifying the actual services:
+
+1. Set `VITE_PORELEDGER_DEMO_URL` to the deployed static demo URL.
+2. Set `VITE_PORELEDGER_REPO_URL` to the verified public repository URL.
+3. Rebuild the Lovable site. Unset URLs deliberately render no broken links or iframe.
+4. Build the demo with `NEXT_PUBLIC_CCS_EMBED_ORIGINS=https://imansgh.me`.
+   For authenticated preview testing, explicitly include the exact preview origin
+   in the demo build as well; it is a different origin from production.
+5. Test a synthetic calculation, JSON/CSV downloads, errors, and frame growth
+   and shrinkage on desktop and mobile before publishing.
+
+The parent checks both the exact frame origin and `event.source`, rejects
+non-finite heights, clamps to 600-20000 pixels, and removes its listener on
+unmount. The full-screen link is available when a demo URL is configured.
+An iframe load event alone does not establish backend readiness.
+
+The older single-file [route example](../deploy/lovable/poreledger-ccs.tsx)
+is a historical integration sketch, not the current Lovable implementation.
+Do not copy it over the prepared page: it hardcodes unreleased links and lacks
+the newer source/finite-height checks.
 
 ## 7. Verified before publication (2026-10-02)
 
@@ -195,3 +203,21 @@ retire it.
 
 Not verified here: Docker builds (no Docker available), any real host, the
 real GitHub Pages and imansgh.me integration, and a public HTTPS backend.
+
+
+## 8. Verification update (2026-10-04)
+
+Independent local verification on 2026-10-03: 1,626 Python tests, 186 strict
+reference checks and 209 frontend tests passed. Static export and TypeScript
+checks passed. These are dated local results, not a current GitHub CI badge.
+The export rehearsal used an `.invalid` API URL and must not be deployed.
+
+Cross-origin initial rendering and height messaging were observed. Calculation
+and exports were reported in a same-origin sandbox; complete cross-origin
+calculation and actual downloads still need verification. Docker and real
+hosting were not independently verified.
+
+Lovable reported successful build/type checks and desktop/mobile checks for
+the portfolio preview. Its final source diff was inspected, including science
+copy corrections. Independent visual review required Lovable sign-in.
+The configured live-iframe path remains untested until the real demo is hosted.
