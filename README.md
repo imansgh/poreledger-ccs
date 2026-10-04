@@ -7,9 +7,18 @@ Python/FastAPI calculation service and a Next.js website. You declare the
 inputs, the model's fixed priors and assumptions are shown with every result,
 and runs are reproducible (fixed seed, exported inputs and settings).
 
-**Live demo:** planned at `imansgh.me/poreledger-ccs`; not deployed yet. The
-publication contents and the demo architecture are in
-[docs/public-release.md](docs/public-release.md).
+**Version:** 0.2.0 (release candidate; no public release is claimed).
+
+| Component | Current status |
+| --- | --- |
+| Assessment engine and local interface | Implemented and tested; run locally using the quick start below |
+| Portfolio page | Prepared in Lovable preview at `/poreledger-ccs`; not published on imansgh.me |
+| Hosted interactive demo | Not active; HTTPS backend and static hosting still need deployment and end-to-end verification |
+| Public repository | `imansgh/poreledger-ccs` is the intended publication destination, not a verified public release |
+
+See [release notes](CHANGELOG.md), [publication guide](docs/public-release.md)
+and [release decisions](docs/release-decisions.md). The personal website link
+above is the author's portfolio, not a running calculation service.
 
 Screen a geological CO2 storage site **with your own data**. Enter or upload a
 well or site description -- storage area, the storage-assessment interval and
@@ -36,7 +45,8 @@ P_EOS = 101325 Pa + rho_brine * g * (z_state - z_wl)
   and `z_state = (z_top + z_base)/2` are derived.
 - `T` is selected from your temperature observations by the contract's rule
   (corrected methods only, inside the interval, ground-level TVD depths, not
-  below total depth). It is never assumed.
+  below total depth). It is never assumed. Supply already-corrected observations; the tool does not
+  correct raw logged temperatures.
 - Pressure is hydrostatic under two named water-level scenarios,
   `GROUND_REFERENCE` (`z_wl = 0`) and `SEA_LEVEL_SENSITIVITY` (`z_wl` = ground
   elevation above sea level).
@@ -44,7 +54,8 @@ P_EOS = 101325 Pa + rho_brine * g * (z_state - z_wl)
   Wagner over 1-35 MPa and 280-400 K.
 - Porosity U(0.10, 0.35), storage efficiency U(0.01, 0.04) and brine density
   U(1020, 1100) kg/m3 are the approved priors; a Monte Carlo gives P10/P50/P90.
-  These priors cannot be overridden.
+  These priors cannot be overridden. The ranges reflect sampling of these
+  model priors, not uncertainty in every user-entered measurement.
 
 **Does not assess:** whether your inputs are correct; reservoir quality,
 injectivity, containment, caprock integrity, pressure management or
@@ -107,7 +118,9 @@ The page opens on the work itself: inputs on the left, results on the right
 2. **Review inputs.** Units sit next to every value. An *input completeness*
    checklist (not an accuracy score) links to anything missing or
    unsupported. Import and validation problems appear beside the field, with
-   CSV row numbers; entries are kept while you fix them. Model-controlled
+   CSV row numbers; a partial or conflicting CSV import blocks calculation until a corrected
+   file is uploaded or a fresh assessment is started. Editing a partial preview
+   does not remove that block. Model-controlled
    assumptions are marked as such.
 3. **Calculate.** The backend's approved engine evaluates the assessment, the
    same code path as every other well. The button shows progress, and is
@@ -163,7 +176,7 @@ or the actual storage capacity.** The interface keeps three things separate:
 
 - The Model Contract is unchanged. User data runs through the same engine as
   every existing well; nothing scientific is computed in the browser.
-- Only ground-level depths in TVD are evaluated. Other datums, MD and unknown
+- For user assessments, only ground-level depths in TVD are evaluated. Other datums, MD and unknown
   conventions give `UNAVAILABLE`; nothing is converted or relabelled. The MD/TVD
   gate and the treatment of declared datums are recorded, with evidence, as
   interpretations awaiting owner confirmation in
@@ -176,8 +189,9 @@ or the actual storage capacity.** The interface keeps three things separate:
 
 ## Your data
 
-Nothing you enter or upload is stored, added to any dataset, or logged by the
-application; files are parsed as data, never executed. Details:
+Submitted assessment values are processed in memory, not persisted or added
+to any dataset; the application does not log request bodies. Hosting providers
+may have their own infrastructure logs; files are parsed as data, never executed. Details:
 [docs/data-handling.md](docs/data-handling.md).
 
 ## Existing well data (optional)
@@ -205,14 +219,14 @@ dataset); `/wells/*` for existing data. Reference: [docs/http-api.md](docs/http-
 
 ```bash
 python -m pytest -q
-CCS_REQUIRE_REFERENCE_TESTS=1 python -m pytest tests/test_independent_calculation_audit.py tests/test_properties_audit.py   # needs CoolProp
+CCS_REQUIRE_REFERENCE_TESTS=1 python -m pytest tests/test_independent_calculation_audit.py tests/test_properties_audit.py tests/test_properties.py tests/test_assessment.py   # install CoolProp first
 cd frontend
 npm test && npm run typecheck && npm run build
 npm run test:assessment      # user workflow against a real backend with no dataset
 npm run test:demo            # existing-data section on the synthetic demo wells
 ```
 
-CI runs all of these on every push, including the CoolProp reference checks in
+The included CI workflow is configured to run these checks on pushes and pull requests, including the CoolProp reference checks in
 strict mode (a missing CoolProp fails, it does not skip). The
 [CoolProp](http://www.coolprop.org/) checks are a test-time reference only;
 the package does not depend on it.
